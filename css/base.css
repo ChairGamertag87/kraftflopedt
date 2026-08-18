@@ -1,0 +1,190 @@
+/* ══════════════════════════════════════════════════
+   BASE.CSS — Variables, reset, body, composants carte
+   ══════════════════════════════════════════════════ */
+
+:root {
+  --craft:       #d4b896;
+  --craft-light: #f7f0e6;
+  --craft-dark:  #a07840;
+  --ink:         #2c1a00;
+  --ink-faded:   #7a5c30;
+  --tape:        rgba(245, 230, 180, 0.75);
+  --red-stamp:   #9b2a2a;
+  --bg:          #d9c4a0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E");
+  min-height: 100vh;
+  font-family: 'Special Elite', serif;
+  color: var(--ink);
+  padding: 32px 20px 60px;
+}
+
+/* Grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23g)' opacity='0.06'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.4;
+}
+
+/* ── Container ── */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ════════════════════════════
+   CARD
+════════════════════════════ */
+.card {
+  background: #fdf8f0;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent, transparent 24px,
+      rgba(139, 105, 20, 0.08) 24px,
+      rgba(139, 105, 20, 0.08) 25px
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+  border: 1px solid var(--craft-dark);
+  border-radius: 3px;
+  padding: 28px 32px;
+  position: relative;
+  box-shadow:
+    3px 3px 0 rgba(44, 26, 0, 0.2),
+    6px 6px 0 rgba(44, 26, 0, 0.1),
+    0 0 30px rgba(44, 26, 0, 0.12);
+  animation: fadeIn 0.5s ease both;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, transparent 50%);
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(14px) rotate(-0.4deg); }
+  to   { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+/* ── Tape ── */
+.tape {
+  position: absolute;
+  width: 90px;
+  height: 22px;
+  background: var(--tape);
+  border: 1px solid rgba(200, 169, 110, 0.6);
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1.5deg);
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
+}
+.tape-left  { left: 24px; transform: rotate(2.5deg); }
+.tape-right { left: auto; right: 24px; transform: rotate(-2deg); }
+
+/* ── Stamp ── */
+.stamp {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  border: 3px solid var(--red-stamp);
+  color: var(--red-stamp);
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 3px 8px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  transform: rotate(8deg);
+  border-radius: 2px;
+}
+
+/* ── Pin ── */
+.pin {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle at 35% 35%, #e05252, #8b1a1a);
+  border-radius: 50% 50% 50% 0;
+  transform: translateX(-50%) rotate(-45deg);
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Card fold ── */
+.card-fold {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 22px 22px;
+  border-color: transparent transparent var(--craft-dark) transparent;
+  opacity: 0.35;
+}
+
+/* ── Section title ── */
+.section-title {
+  font-family: 'Caveat', cursive;
+  font-size: 1.9rem;
+  font-weight: 600;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--craft-dark) 0,
+    var(--craft-dark) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  opacity: 0.3;
+}
+
+/* ── Spin animation ── */
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Footer ── */
+.footer-note {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.72rem;
+  color: var(--ink-faded);
+  text-align: center;
+  opacity: 0.6;
+  margin-top: 8px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  body { padding: 20px 12px 40px; }
+  .card { padding: 20px 16px; }
+}

@@ -1,0 +1,200 @@
+/* ══════════════════════════════════════════════════
+   SCHEDULE.CSS — Grille emploi du temps & cours
+   ══════════════════════════════════════════════════ */
+
+/* ── Wrapper scroll ── */
+.schedule-wrap { overflow-x: auto; }
+
+/* ── Grille principale ── */
+.schedule-grid {
+  display: grid;
+  grid-template-columns: 64px repeat(5, 1fr);
+  gap: 0;
+  min-width: 700px;
+}
+
+/* ── En-têtes de jours ── */
+.day-header {
+  font-family: 'Caveat', cursive;
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 10px 6px;
+  text-align: center;
+  color: var(--ink);
+  border-bottom: 2px dashed rgba(139, 105, 20, 0.3);
+  position: sticky;
+  top: 0;
+  background: #fdf8f0;
+  z-index: 10;
+}
+
+.day-header.today {
+  color: var(--craft-dark);
+  background: rgba(139, 105, 20, 0.12);
+  border-bottom-color: var(--craft-dark);
+}
+
+.day-header span {
+  display: block;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  color: var(--ink-faded);
+}
+
+.time-header {
+  border-bottom: 2px dashed rgba(139, 105, 20, 0.3);
+  background: #fdf8f0;
+}
+
+/* ── Colonne horaires ── */
+.time-slot {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.68rem;
+  color: var(--ink-faded);
+  padding: 0 6px;
+  text-align: right;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 3px;
+  border-right: 1px solid rgba(139, 105, 20, 0.2);
+}
+.time-slot.half {
+  color: rgba(122, 92, 48, 0.35);
+  font-size: 0.6rem;
+}
+
+/* ── Colonnes jours ── */
+.day-col {
+  border-right: 1px solid rgba(139, 105, 20, 0.12);
+  position: relative;
+}
+.day-col:last-child { border-right: none; }
+
+/* ── Hour row (background) ── */
+.hour-row {
+  height: 44px;
+  border-bottom: 1px solid rgba(139, 105, 20, 0.1);
+  position: relative;
+}
+.hour-row.full { border-bottom-color: rgba(139, 105, 20, 0.2); }
+
+/* ════════════════════════════
+   COURS
+════════════════════════════ */
+.course-card {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 2px;
+  padding: 4px 7px;
+  border-left: 3px solid var(--craft-dark);
+  cursor: pointer;
+  overflow: hidden;
+  z-index: 5;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 1px 2px 4px rgba(44, 26, 0, 0.15);
+}
+.course-card:hover {
+  transform: translateX(2px) translateY(-1px);
+  box-shadow: 3px 4px 8px rgba(44, 26, 0, 0.25);
+  z-index: 20;
+}
+.course-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.course-name {
+  font-family: 'Caveat', cursive;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.2;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.course-meta {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.75rem;
+  color: var(--ink-faded);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.course-type-badge {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 1px;
+  display: inline-block;
+  margin-bottom: 2px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Layout compact pour les cours courts (<45 min) ── */
+.course-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.course-compact .course-type-badge { margin-bottom: 0; }
+.course-compact .course-name {
+  font-size: 0.92rem;
+  margin-bottom: 0;
+}
+.course-compact .course-meta {
+  font-size: 0.68rem;
+}
+
+/* ── Couleurs par type (fallback si pas de couleur FlOpEDT) ── */
+.type-cm     { background: rgba(255, 220, 150, 0.55); border-left-color: #c08020; }
+.type-cm     .course-type-badge { background: #c08020; color: #fdf8f0; }
+
+.type-td     { background: rgba(180, 220, 180, 0.55); border-left-color: #3a7a3a; }
+.type-td     .course-type-badge { background: #3a7a3a; color: #fdf8f0; }
+
+.type-tp     { background: rgba(160, 200, 240, 0.55); border-left-color: #2060a0; }
+.type-tp     .course-type-badge { background: #2060a0; color: #fdf8f0; }
+
+.type-projet { background: rgba(200, 210, 240, 0.45); border-left-color: #404080; }
+.type-projet .course-type-badge { background: #404080; color: #fdf8f0; }
+
+.type-exam   { background: rgba(240, 150, 150, 0.55); border-left-color: #9b2a2a; }
+.type-exam   .course-type-badge { background: #9b2a2a; color: #fdf8f0; }
+
+.type-other  { background: rgba(210, 180, 250, 0.45); border-left-color: #6040a0; }
+.type-other  .course-type-badge { background: #6040a0; color: #fdf8f0; }
+
+/* ════════════════════════════
+   ÉTATS (loading / vide / erreur)
+════════════════════════════ */
+.state-box {
+  text-align: center;
+  padding: 48px 20px;
+  font-family: 'Caveat', cursive;
+  font-size: 1.5rem;
+  color: var(--ink-faded);
+}
+
+.state-box .state-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.state-box .state-sub {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.8rem;
+  margin-top: 8px;
+  color: var(--ink-faded);
+  opacity: 0.7;
+}

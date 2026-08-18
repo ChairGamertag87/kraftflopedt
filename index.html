@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>KraftFlopEDT — Emploi du temps IUT Blagnac</title>
+  <meta name="description" content="Consulte ton emploi du temps de l'IUT de Blagnac. Filtrage par département, promo et groupe. Données en temps réel via FlOpEDT.">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Open Graph (aperçu Discord, WhatsApp...) -->
+  <meta property="og:title" content="KraftFlopEDT — IUT Blagnac">
+  <meta property="og:description" content="Ton emploi du temps IUT Blagnac en style carton.">
+  <meta property="og:url" content="https://kraftflopedt.habibiserver.dev">
+  <meta property="og:type" content="website">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='6' fill='%23a07840'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Georgia,serif' font-size='30' font-weight='700' fill='%23fdf8f0'%3EEDT%3C/text%3E%3C/svg%3E">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Special+Elite&family=Inconsolata:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/controls.css">
+  <link rel="stylesheet" href="css/schedule.css">
+  <link rel="stylesheet" href="css/overlay.css">
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- ══ HEADER ══ -->
+    <div class="card header-card" style="animation-delay: 0s">
+      <div class="tape"></div>
+      <div class="stamp">IUT Blagnac</div>
+      <div class="header-title">KraftFlopEDT</div>
+      <div class="header-sub">Emploi du temps — FlOpEDT</div>
+      <div class="doodle-line"></div>
+      <div class="header-tagline">
+        Semaines passées, présentes et futures
+        chargées depuis flopedt.iut-blagnac.fr<br>
+
+        <strong>Nouvelle Mise à Jour !!</strong>
+      </div>
+      <div class="card-fold"></div>
+    </div>
+
+    <!-- ══ CONTROLES ══ -->
+    <div class="card" style="animation-delay: 0.1s">
+      <div class="tape tape-left"></div>
+
+      <div class="controls-bar">
+
+        <!-- Bouton sélection dept/promo/groupe → ouvre le modal -->
+        <button class="selector-btn" id="selector-btn" onclick="openSelector()">
+          <span class="selector-current" id="selector-label">INFO · —</span>
+          <span class="selector-arrow">▾</span>
+        </button>
+
+        <!-- Navigation semaine -->
+        <div class="week-nav">
+          <button class="week-btn" onclick="changeWeek(-1)" aria-label="Semaine précédente">◀</button>
+          <div class="week-label" id="week-label">Semaine —</div>
+          <button class="week-btn" onclick="changeWeek(+1)" aria-label="Semaine suivante">▶</button>
+        </div>
+
+        <!-- Bouton salles libres -->
+        <button class="selector-btn rooms-btn" onclick="openRooms()">
+          🚪 Salles libres
+        </button>
+
+      </div>
+
+      <!-- Légende -->
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background: rgba(192,128,32,0.7)"></div>
+          <span class="legend-label">CM</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: rgba(58,122,58,0.7)"></div>
+          <span class="legend-label">TD</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: rgba(32,96,160,0.7)"></div>
+          <span class="legend-label">TP</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: rgba(155,42,42,0.7)"></div>
+          <span class="legend-label">Examen</span>
+        </div>
+      </div>
+
+      <!-- Bannière d'erreur -->
+      <div id="error-banner" class="error-banner"></div>
+
+      <div class="card-fold"></div>
+    </div>
+
+    <!-- ══ MODAL SÉLECTION DEPT / PROMO / GROUPE ══ -->
+    <div id="selector-overlay" class="selector-overlay" onclick="closeSelectorOutside(event)">
+      <div class="selector-panel card">
+        <div class="tape"></div>
+        <button class="detail-close" onclick="closeSelector()">✕</button>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Département</div>
+          <div class="selector-row" id="dept-btns">
+            <button class="sel-chip active" data-value="INFO" onclick="selectDept(this)">Info</button>
+            <button class="sel-chip" data-value="CS" onclick="selectDept(this)">CS</button>
+            <button class="sel-chip" data-value="GIM" onclick="selectDept(this)">GIM</button>
+            <button class="sel-chip" data-value="RT" onclick="selectDept(this)">RT</button>
+          </div>
+        </div>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Promo</div>
+          <div class="selector-row" id="promo-btns">
+            <!-- Peuplé dynamiquement depuis l'arbre API -->
+          </div>
+        </div>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Groupe</div>
+          <div class="selector-row" id="group-btns">
+            <!-- Peuplé dynamiquement -->
+          </div>
+        </div>
+
+        <div class="card-fold"></div>
+      </div>
+    </div>
+
+    <!-- ══ MODAL SALLES LIBRES ══ -->
+    <div id="rooms-overlay" class="selector-overlay" onclick="closeRoomsOutside(event)">
+      <div class="selector-panel card" style="max-width:520px;">
+        <div class="tape"></div>
+        <button class="detail-close" onclick="closeRooms()">✕</button>
+
+        <div class="selector-section">
+          <div class="selector-section-title">🚪 Salles libres</div>
+        </div>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Jour</div>
+          <div class="selector-row" id="rooms-days">
+            <!-- Peuplé par JS -->
+          </div>
+        </div>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Créneau</div>
+          <div class="selector-row" id="rooms-hours">
+            <!-- Peuplé par JS -->
+          </div>
+        </div>
+
+        <div id="rooms-result" class="rooms-result">
+          <div class="rooms-hint">Sélectionnez un jour et un créneau</div>
+        </div>
+
+        <div class="card-fold"></div>
+      </div>
+    </div>
+    <!-- ══ GRILLE EDT ══ -->
+    <div class="card" id="schedule-card" style="animation-delay: 0.2s; padding: 20px 16px;">
+      <div class="pin"></div>
+
+      <div id="schedule-container">
+        <div class="state-box">
+          <span class="state-icon">📋</span>
+          Sélectionne ta promo et ton groupe
+          <div class="state-sub">// clique sur le sélecteur ci-dessus pour commencer</div>
+        </div>
+      </div>
+
+      <div class="card-fold"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-note">
+      flopedt.iut-blagnac.fr · Données en temps réel · Herrard Clément
+    </div>
+
+  </div><!-- /.container -->
+
+
+  <!-- ══ MODAL DÉTAIL COURS ══ -->
+  <div id="detail-overlay" onclick="closeDetailOutside(event)">
+    <div id="detail-panel">
+      <button class="detail-close" onclick="closeDetail()">✕ Fermer</button>
+      <div class="tape"></div>
+      <div class="detail-title" id="d-name">—</div>
+      <div style="margin: 6px 0 16px;">
+        <span id="d-badge" class="course-type-badge" style="font-size:0.75rem; padding:2px 8px;"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">🕐 Horaires</span>
+        <span class="detail-val" id="d-time">—</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">📅 Jour</span>
+        <span class="detail-val" id="d-day">—</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">📍 Salle</span>
+        <span class="detail-val" id="d-room">—</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">👤 Prof</span>
+        <span class="detail-val" id="d-tutor">—</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">👥 Groupe</span>
+        <span class="detail-val" id="d-group">—</span>
+      </div>
+      <div class="card-fold"></div>
+    </div>
+  </div>
+
+
+  <!-- ══ SCRIPTS ══ -->
+  <!-- Ordre important : config → utils → state → ui → api → render → main -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/rooms.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>

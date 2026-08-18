@@ -1,0 +1,20 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: kraftflopedt-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8093:80"
+
+  adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.adapter
+    container_name: kraftflopedt-adapter
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+    ports:
+      - "127.0.0.1:8094:3001"

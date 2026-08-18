@@ -1,0 +1,45 @@
+/* ══════════════════════════════════════════════════
+   HEADER.CSS — Carte d'en-tête du site
+   ══════════════════════════════════════════════════ */
+
+.header-card {
+  text-align: center;
+  padding: 40px 32px;
+}
+
+.header-title {
+  font-family: 'Caveat', cursive;
+  font-size: clamp(2.8rem, 7vw, 5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+  margin-bottom: 6px;
+}
+
+.header-sub {
+  font-family: 'Special Elite', serif;
+  font-size: 1rem;
+  color: var(--ink-faded);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.doodle-line {
+  width: 50%;
+  height: 3px;
+  margin: 16px auto;
+  border-bottom: 2px dashed var(--craft-dark);
+  opacity: 0.4;
+}
+
+.header-tagline {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.88rem;
+  color: var(--craft-dark);
+  background: rgba(139, 105, 20, 0.12);
+  display: inline-block;
+  padding: 6px 16px;
+  border-left: 3px solid var(--craft-dark);
+  text-align: center;
+}

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kraftflopedt.habibiserver.dev/sitemap.xml
