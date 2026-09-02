@@ -1,5 +1,8 @@
 services:
-  web:
+  # Nom de service explicite : Compose l'enregistre comme alias DNS sur chaque
+  # reseau rejoint. Un service nomme 'web' sur le reseau partage figutab_default
+  # entrait en collision avec le 'web' du projet figutab (reverse_proxy web:80).
+  kraftflopedt-web:
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -8,7 +11,7 @@ services:
     ports:
       - "127.0.0.1:8093:80"
 
-  adapter:
+  kraftflopedt-adapter:
     build:
       context: .
       dockerfile: Dockerfile.adapter
