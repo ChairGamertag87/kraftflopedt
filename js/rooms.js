@@ -37,14 +37,18 @@ let _roomsHour = null;
 //  Créneaux IUT (heures de début)
 // ════════════════════════════
 
+// Valeurs en minutes depuis minuit, comme le start_time de FlOpEDT.
+// On reste en minutes entières de bout en bout : une conversion en heures
+// décimales tronquées (11.083 pour 11h05) faisait échouer la comparaison
+// avec 665/60 et affichait libres des salles occupées.
 const ROOM_SLOTS = [
-  { label: '8h00',  value: 8 },
-  { label: '9h30',  value: 9.5 },
-  { label: '11h05', value: 11.083 },
-  { label: '12h35', value: 12.583 },
-  { label: '14h15', value: 14.25 },
-  { label: '15h45', value: 15.75 },
-  { label: '17h20', value: 17.333 },
+  { label: '8h00',  value: 480 },
+  { label: '9h30',  value: 570 },
+  { label: '11h05', value: 665 },
+  { label: '12h35', value: 755 },
+  { label: '14h15', value: 855 },
+  { label: '15h45', value: 945 },
+  { label: '17h20', value: 1040 },
 ];
 
 // ════════════════════════════
@@ -65,8 +69,8 @@ function openRooms() {
 
   // Pré-sélectionne le créneau le plus proche
   if (_roomsHour === null) {
-    const nowH = now.getHours() + now.getMinutes() / 60;
-    const best = ROOM_SLOTS.reduce((prev, s) => s.value <= nowH ? s : prev, ROOM_SLOTS[0]);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const best = ROOM_SLOTS.reduce((prev, s) => s.value <= nowMin ? s : prev, ROOM_SLOTS[0]);
     _roomsHour = best.value;
   }
 
@@ -164,8 +168,8 @@ async function fetchAllCoursesForWeek() {
           if (room && day >= 0) {
             allCourses.push({
               room, day,
-              start: startMin / 60,
-              end:   (startMin + duration) / 60,
+              start: startMin,             // minutes depuis minuit
+              end:   startMin + duration,  // minutes depuis minuit
             });
           }
         });
@@ -192,7 +196,7 @@ async function searchFreeRooms() {
     _roomsYear = state.currentYear;
   }
 
-  // Salles occupées à ce créneau
+  // Salles occupées à ce créneau (comparaison en minutes entières)
   const occupied = new Set();
   _allCourses.forEach(c => {
     if (c.day === _roomsDay && _roomsHour >= c.start && _roomsHour < c.end) {
