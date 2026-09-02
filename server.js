@@ -3,8 +3,9 @@
  *
  * Ce serveur fait deux choses :
  *  1. Sert les fichiers statiques du site (HTML, CSS, JS)
- *  2. Proxifie les appels vers flopedt.iut-blagnac.fr
- *     pour contourner le blocage CORS du navigateur
+ *  2. Proxifie /api/flopedt/* vers flopedt.iut-blagnac.fr
+ *     (GET uniquement, 4 endpoints autorisés) pour contourner
+ *     le blocage CORS du navigateur
  *
  * Usage :
  *   node server.js
@@ -19,6 +20,16 @@ const url   = require('url');
 
 const PORT        = 3000;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
+
+// ── Proxy restreint : seuls ces endpoints FlOpEDT sont relayés, en GET ──
+// (liste identique à docker/nginx.conf pour la prod)
+const PROXY_PREFIX  = '/api/flopedt';
+const PROXY_ALLOWED = new Set([
+  '/fr/api/fetch/scheduledcourses/',
+  '/fr/api/fetch/constraints/',
+  '/fr/api/groups/structural/tree/',
+  '/fr/api/rooms/all/',
+]);
 
 // ── Types MIME pour les fichiers statiques ──
 const MIME = {
@@ -40,43 +51,49 @@ const STATIC_DIR = path.join(__dirname);
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
 
-  // ── Route proxy : /proxy?url=https://flopedt... ──
-  if (parsed.pathname === '/proxy') {
-    const targetUrl = parsed.query.url;
+  // ── Route proxy : /api/flopedt/<endpoint FlOpEDT> ──
+  // Même chemin et mêmes règles qu'en prod (docker/nginx.conf) :
+  // GET uniquement, 4 endpoints autorisés, aucun cookie transmis.
+  if (parsed.pathname.startsWith(PROXY_PREFIX)) {
+    const upstreamPath = parsed.pathname.slice(PROXY_PREFIX.length);
 
-    if (!targetUrl || !targetUrl.startsWith(`https://${FLOPEDT_HOST}`)) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end('URL cible invalide ou non autorisée.');
+    if (!PROXY_ALLOWED.has(upstreamPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Endpoint FlOpEDT non autorisé', path: upstreamPath }));
+      return;
+    }
+    if (req.method !== 'GET') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET' });
+      res.end(JSON.stringify({ error: 'Méthode non autorisée' }));
       return;
     }
 
-    console.log(`[PROXY] → ${targetUrl}`);
+    const search = parsed.search || '';
+    console.log(`[PROXY] → https://${FLOPEDT_HOST}${upstreamPath}${search}`);
 
     const options = {
       hostname: FLOPEDT_HOST,
-      path:     targetUrl.replace(`https://${FLOPEDT_HOST}`, ''),
-      method:   req.method,
+      path:     upstreamPath + search,
+      method:   'GET',
       headers: {
-        'Accept':          'application/json',
-        'Accept-Encoding': 'gzip, deflate',
-        'User-Agent':      'Mozilla/5.0 (EDT-Proxy/1.0)',
-        // Simule une requête depuis le site lui-même
-        'Referer':         `https://${FLOPEDT_HOST}/`,
-        'Origin':          `https://${FLOPEDT_HOST}`,
+        'Accept':     'application/json',
+        'User-Agent': 'KraftFlopEDT-Proxy/1.0 (dev)',
       },
     };
 
     const proxyReq = https.request(options, proxyRes => {
       res.writeHead(proxyRes.statusCode, {
-        'Content-Type':                'application/json',
-        'Access-Control-Allow-Origin': '*',   // autorise le navigateur local
+        'Content-Type':                proxyRes.headers['content-type'] || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control':               'no-store',
       });
       proxyRes.pipe(res);
     });
 
+    proxyReq.setTimeout(60000, () => proxyReq.destroy(new Error('timeout upstream (60 s)')));
     proxyReq.on('error', err => {
       console.error('[PROXY] Erreur :', err.message);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     });
 

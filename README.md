@@ -34,8 +34,15 @@ Le terminal doit afficher :
 ## Pourquoi un proxy ?
 
 FlOpEDT bloque les requêtes venant d'un domaine différent (protection CORS).
-Le proxy Node.js agit comme intermédiaire : le navigateur appelle `localhost:3000/proxy?url=...`,
-et le serveur récupère les données côté serveur (sans restriction CORS) puis les retourne.
+Le navigateur appelle donc `/api/flopedt/<endpoint>` sur le site lui-même, et le serveur
+récupère les données côté serveur puis les retourne.
+
+Le proxy est volontairement restreint : GET uniquement, quatre endpoints publics
+(`fetch/scheduledcourses`, `fetch/constraints`, `groups/structural/tree`, `rooms/all`),
+et les cookies du visiteur ne sont jamais transmis à FlOpEDT.
+
+- en dev : `server.js` (port 3000)
+- en prod : le nginx du conteneur web (`docker/nginx.conf`), derrière Caddy
 
 ## Architecture
 

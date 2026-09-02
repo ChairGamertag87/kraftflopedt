@@ -1,26 +1,18 @@
 /* ══════════════════════════════════════════════════
-   API.JS — Appels réseau vers FlOpEDT via proxy local
+   API.JS — Appels réseau vers FlOpEDT via le proxy /api/flopedt/
    Endpoints :
-     - /fr/api/user/scheduledcourses/  ← cours
+     - /fr/api/fetch/scheduledcourses/ ← cours
      - /fr/api/fetch/constraints/       ← durées par type
      - /fr/api/groups/structural/tree/ ← hiérarchie des groupes
    ══════════════════════════════════════════════════ */
 
 /**
- * Fetch JSON via le proxy nginx (/flopedt/ → flopedt.iut-blagnac.fr).
- * En dev local (server.js), utilise /proxy?url=...
+ * Fetch JSON via le proxy restreint /api/flopedt/ (GET uniquement, 4 endpoints).
+ * En prod il est servi par le nginx du conteneur web (docker/nginx.conf),
+ * en dev par server.js : même chemin dans les deux cas.
  */
 async function apiFetch(endpoint, params) {
-  const isDev = location.port === '3000';
-  let url;
-
-  if (isDev) {
-    const target = `https://flopedt.iut-blagnac.fr${endpoint}?${params}`;
-    url = `/proxy?url=${encodeURIComponent(target)}`;
-  } else {
-    url = `/flopedt${endpoint}?${params}`;
-  }
-
+  const url = `/api/flopedt${endpoint}?${params}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`HTTP ${res.status} sur ${endpoint}`);
   return res.json();
