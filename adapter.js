@@ -9,6 +9,14 @@
  *
  * Returns clean, flat, predictable JSON.
  *
+ * Sert aussi les 4 endpoints bruts de FlOpEDT utilises par le front, sous
+ * /api/flopedt/<endpoint FlOpEDT> (le nginx du conteneur web les relaie ici),
+ * et GET /status (etat du store, expose en /api/status par nginx).
+ *
+ * Toutes les donnees viennent d'un store local (store.js) rafraichi en tache de
+ * fond : FlOpEDT n'est jamais appele dans le chemin d'une requete visiteur, sauf
+ * pour une donnee qu'on n'a encore jamais vue.
+ *
  * Run:
  *   node adapter.js              (port 3001 by default)
  *   PORT=8080 node adapter.js
@@ -18,50 +26,20 @@
  */
 
 const http  = require('http');
-const https = require('https');
 const url   = require('url');
 
 const PORT         = process.env.PORT || 3001;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
 
 // ════════════════════════════════════════════════════
-//  Transport layer — raw call to FlOpEDT
+//  Transport layer — tout passe par le store local (store.js)
+//  FlOpEDT n'est appele qu'en tache de fond ou si la donnee manque.
 // ════════════════════════════════════════════════════
 
-function flopFetch(endpoint, params = {}) {
-  const qs = Object.entries(params)
-    .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
+const store = require('./store');
 
-  const path = qs ? `${endpoint}?${qs}` : endpoint;
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: FLOPEDT_HOST,
-      path,
-      method:   'GET',
-      headers: {
-        'Accept':    'application/json',
-        'User-Agent': 'KraftFlopEDT-Adapter/1.0',
-        'Referer':   `https://${FLOPEDT_HOST}/`,
-        'Origin':    `https://${FLOPEDT_HOST}`,
-      },
-    }, res => {
-      let chunks = '';
-      res.on('data', d => chunks += d);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try { resolve(JSON.parse(chunks)); }
-          catch (e) { reject(new Error(`Invalid JSON from ${endpoint}: ${e.message}`)); }
-        } else {
-          reject(new Error(`HTTP ${res.statusCode} on ${endpoint}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.end();
-  });
+async function flopFetch(endpoint, params = {}) {
+  return (await store.get(endpoint, params)).body;
 }
 
 // ════════════════════════════════════════════════════
@@ -256,9 +234,11 @@ const OPENAPI_SPEC = {
   openapi: '3.0.3',
   info: {
     title: 'KraftFlopEDT Adapter API',
-    version: '1.0.0',
+    version: '2.0.0',
     description: 'A clean REST adapter that wraps the messy FlOpEDT API (IUT Blagnac).\n\n'
-               + 'Returns flat, predictable JSON. Built with vanilla Node.js, zero dependencies.',
+               + 'Returns flat, predictable JSON. Built with vanilla Node.js, zero dependencies.\n\n'
+               + 'All data is served from a local store refreshed in the background '
+               + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.',
     contact: { name: 'Clément Herrard', url: 'https://chairgamertag87.fr' },
   },
   servers: [
@@ -476,6 +456,8 @@ const ROUTES = {
   }),
 };
 
+const RAW_PREFIX = '/api/flopedt';
+
 function send(res, status, payload) {
   res.writeHead(status, {
     'Content-Type':                'application/json; charset=utf-8',
@@ -508,6 +490,30 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/openapi.json') {
     return send(res, 200, OPENAPI_SPEC);
   }
+  if (parsed.pathname === '/status') {
+    return send(res, 200, store.status());
+  }
+
+  // Endpoints bruts FlOpEDT pour le front (js/api.js) : /api/flopedt/fr/api/...
+  if (parsed.pathname.startsWith(RAW_PREFIX)) {
+    const endpoint = parsed.pathname.slice(RAW_PREFIX.length);
+    if (!store.ENDPOINTS[endpoint]) return send(res, 404, { error: 'Endpoint FlOpEDT non autorise', path: endpoint });
+    try {
+      const { body, fetchedAt, status } = await store.get(endpoint, parsed.query);
+      res.writeHead(200, {
+        'Content-Type':                'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control':               'public, max-age=60',
+        'X-Cache':                     status,
+        'X-Data-Fetched-At':           fetchedAt,
+      });
+      return res.end(JSON.stringify(body));
+    } catch (e) {
+      console.error('[ERR]', e.message);
+      const isParam = /invalide|disponible|non autorise/.test(e.message);
+      return send(res, isParam ? 400 : 503, { error: isParam ? e.message : `FlOpEDT indisponible et aucune donnee locale : ${e.message}` });
+    }
+  }
 
   const handler = ROUTES[parsed.pathname];
   if (!handler) return send(res, 404, { error: 'Unknown route', path: parsed.pathname });
@@ -517,9 +523,12 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, { data });
   } catch (e) {
     console.error('[ERR]', e.message);
-    send(res, 400, { error: e.message });
+    const isParam = /^Required parameter|invalide|disponible/.test(e.message);
+    send(res, isParam ? 400 : 503, { error: e.message });
   }
 });
+
+store.start();
 
 server.listen(PORT, () => {
   console.log(`\n  KraftFlopEDT Adapter → https://kraftflopedt.habibiserver.dev`);
@@ -527,5 +536,7 @@ server.listen(PORT, () => {
   console.log(`  Source: https://${FLOPEDT_HOST}\n`);
   console.log('  Endpoints:');
   for (const r of Object.keys(ROUTES).filter(r => r !== '/')) console.log(`    GET ${r}`);
+  console.log(`    GET /status`);
+  console.log(`    GET ${RAW_PREFIX}<endpoint FlOpEDT>  (${Object.keys(store.ENDPOINTS).length} endpoints)`);
   console.log('');
 });

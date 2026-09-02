@@ -31,6 +31,24 @@ Le terminal doit afficher :
   Ctrl+C pour arrêter
 ```
 
+## Store local FlOpEDT (adapter)
+
+FlOpEDT est lent en periode de charge (10 a 20 s par appel) et bloque les IP trop
+insistantes. L'adapter (`adapter.js` + `store.js`) garde donc **toutes les donnees
+en local** (volume Docker `kraftflopedt-adapter-data`, un fichier JSON par cle) et
+ne parle a FlOpEDT qu'en tache de fond, une requete a la fois, espacees de 3 s :
+
+- emplois du temps : tous les departements (`DEPTS`), de la semaine courante - 2 a la
+  fin de l'annee universitaire, **toutes les heures** (`REFRESH_COURSES_MS`), semaines
+  proches en premier ;
+- groupes, contraintes, salles : **toutes les semaines** (`REFRESH_STATIC_MS`) ;
+- une donnee jamais vue est telechargee a la demande puis entretenue ;
+- si FlOpEDT tombe, la derniere version connue continue d'etre servie.
+
+Le nginx du conteneur web relaie `/api/flopedt/*` vers l'adapter (plus vers FlOpEDT),
+donc le front n'attend plus jamais FlOpEDT. Les reponses portent `X-Cache: hit|stale|miss`
+et `X-Data-Fetched-At`. Etat du store : `GET /api/status`.
+
 ## Pourquoi un proxy ?
 
 FlOpEDT bloque les requêtes venant d'un domaine différent (protection CORS).

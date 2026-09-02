@@ -8,6 +8,8 @@ services:
       dockerfile: Dockerfile.web
     container_name: kraftflopedt-web
     restart: unless-stopped
+    depends_on:
+      - kraftflopedt-adapter
     ports:
       - "127.0.0.1:8093:80"
 
@@ -19,5 +21,18 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3001
+      # Store local FlOpEDT (voir store.js) : emplois du temps toutes les heures,
+      # groupes/contraintes/salles toutes les semaines, 3 s entre deux appels.
+      - DEPTS=INFO,RT,CS,GIM
+      - REFRESH_COURSES_MS=3600000
+      - REFRESH_STATIC_MS=604800000
+      - MIN_GAP_MS=3000
+      - WEEKS_BEHIND=2
+    volumes:
+      - kraftflopedt-adapter-data:/data
     ports:
       - "127.0.0.1:8094:3001"
+
+volumes:
+  # Donnees FlOpEDT stockees en local : survivent aux redeploiements
+  kraftflopedt-adapter-data:
