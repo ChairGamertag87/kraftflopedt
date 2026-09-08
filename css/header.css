@@ -16,6 +16,8 @@
   margin-bottom: 6px;
 }
 
+.ios-title { display: none; }
+
 .header-sub {
   font-family: 'Special Elite', serif;
   font-size: 1rem;

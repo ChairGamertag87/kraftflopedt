@@ -3,6 +3,7 @@
    ══════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  applyTheme();       // libellé du bouton de thème, titre iOS, bande de jours
   updateWeekLabel();
 
   // Restaure dept/promo/groupe depuis l'URL ou la dernière visite
