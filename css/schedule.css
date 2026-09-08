@@ -140,14 +140,18 @@
 
 .course-name {
   font-family: 'Caveat', cursive;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--ink);
-  line-height: 1.2;
+  line-height: 1.15;
   margin-bottom: 2px;
-  white-space: nowrap;
+  /* Le nom passe sur deux lignes au besoin plutot que d'etre coupe par « … » */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .course-meta {
@@ -167,7 +171,7 @@
   align-items: flex-start;
   min-width: 0;
 }
-.course-head .course-name { max-width: 100%; }
+.course-head .course-name { width: 100%; }
 
 /* Couleur du module FlOpEDT (variable --accent posée par render.js) */
 @supports (background: color-mix(in srgb, red 10%, white)) {
@@ -198,6 +202,9 @@
 .course-compact .course-name {
   font-size: 0.92rem;
   margin-bottom: 0;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .course-compact .course-meta {
   font-size: 0.68rem;
