@@ -7,14 +7,6 @@
   <title>KraftFlopEDT — Emploi du temps IUT Blagnac</title>
   <meta name="description" content="Consulte ton emploi du temps de l'IUT de Blagnac. Filtrage par département, promo et groupe. Données en temps réel via FlOpEDT.">
   <meta name="robots" content="noindex, nofollow">
-  <script>
-    // Restaure le thème avant le CSS (pas de flash). ?theme=ios|carton force et mémorise.
-    try {
-      var q = new URLSearchParams(location.search).get('theme');
-      if (q === 'ios' || q === 'carton') localStorage.setItem('edt-theme', q);
-      if (localStorage.getItem('edt-theme') === 'ios') document.documentElement.setAttribute('data-theme', 'ios');
-    } catch (e) {}
-  </script>
 
   <!-- Open Graph (aperçu Discord, WhatsApp...) -->
   <meta property="og:title" content="KraftFlopEDT — IUT Blagnac">
@@ -34,7 +26,6 @@
   <link rel="stylesheet" href="css/controls.css">
   <link rel="stylesheet" href="css/schedule.css">
   <link rel="stylesheet" href="css/overlay.css">
-  <link rel="stylesheet" href="css/ios.css">
 </head>
 <body>
 
@@ -45,10 +36,6 @@
       <div class="tape"></div>
       <div class="stamp">IUT Blagnac</div>
       <div class="header-title">KraftFlopEDT</div>
-      <div class="ios-title">
-        <div class="ios-title-main" id="ios-title">—</div>
-        <div class="ios-title-sub" id="ios-subtitle">Semaine —</div>
-      </div>
       <div class="header-sub">Emploi du temps — FlOpEDT</div>
       <div class="doodle-line"></div>
       <div class="header-tagline">
@@ -77,7 +64,6 @@
           <button class="week-btn" onclick="changeWeek(-1)" aria-label="Semaine précédente">◀</button>
           <div class="week-label" id="week-label">Semaine —</div>
           <button class="week-btn" onclick="changeWeek(+1)" aria-label="Semaine suivante">▶</button>
-          <button class="today-btn" id="today-btn" onclick="goToday()" hidden>Aujourd'hui</button>
         </div>
 
         <!-- Bouton salles libres -->
@@ -90,15 +76,7 @@
           🔍 Où est le prof ?
         </button>
 
-        <!-- Bascule d'apparence : carton (défaut) / style flop!EDT iOS -->
-        <button class="selector-btn rooms-btn theme-btn" id="theme-btn" onclick="toggleTheme()" aria-pressed="false">
-          📱 Style iOS
-        </button>
-
       </div>
-
-      <!-- Bande de 7 jours (thème iOS uniquement, peuplée par theme.js) -->
-      <div class="week-strip" id="week-strip"></div>
 
       <!-- Légende -->
       <div class="legend">
@@ -273,11 +251,10 @@
 
 
   <!-- ══ SCRIPTS ══ -->
-  <!-- Ordre important : config → utils → state → theme → ui → api → render → main -->
+  <!-- Ordre important : config → utils → state → ui → api → render → main -->
   <script src="js/config.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/state.js"></script>
-  <script src="js/theme.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/api.js"></script>
   <script src="js/render.js"></script>

@@ -57,26 +57,6 @@ permet de partager un lien direct. Au chargement, l'URL a priorite sur la memoir
 locale ; la selection est appliquee des que les chips existent (liste locale de
 secours d'abord, arbre FlOpEDT ensuite) et l'EDT se charge sans clic.
 
-## Deux apparences : carton et iOS
-
-Le bouton "Style iOS" / "Style carton" bascule toute l'apparence du site. Le theme
-est memorise (`localStorage`, cle `edt-theme`) et peut etre force par `?theme=ios`
-ou `?theme=carton` dans l'URL. Un script inline dans `<head>` le restaure avant le
-CSS pour eviter un flash.
-
-- **carton** (defaut) : le style d'origine, `css/base.css` et compagnie.
-- **iOS** : `css/ios.css`, scope sous `html[data-theme="ios"]`, reprend l'app
-  [flop-edt-ios](https://github.com/maelancochet/flop-edt-ios) : police systeme,
-  fonds groupes iOS clair/sombre (`prefers-color-scheme`), accent bleu, grand titre
-  "Septembre / Semaine 37", bande de 7 jours facon Calendrier (aujourd'hui en rouge,
-  pastille sous les jours avec cours), cartes de cours a barre de couleur, feuilles
-  modales. Sur mobile, la grille devient une vue jour pilotee par la bande.
-
-Le rendu (`js/render.js`) est neutre : classes CSS plutot que styles inline, couleur
-du module exposee en variable `--accent`, heures formatees via `formatClock` (8h00 en
-carton, 08:00 en iOS). Les cours qui se chevauchent sont repartis en colonnes.
-`js/theme.js` porte la bascule, la bande de jours, le titre et le bouton Aujourd'hui.
-
 ## Ou est le prof ?
 
 Le bouton "Ou est le prof ?" liste les enseignants (initiales FlOpEDT) ayant cours
@@ -110,8 +90,7 @@ edt-blagnac/
 │   ├── header.css   ← en-tête
 │   ├── controls.css ← filtres, navigation semaine
 │   ├── schedule.css ← grille EDT, cours, couleurs par type
-│   ├── overlay.css  ← modal détail d'un cours
-│   └── ios.css      ← thème « flop!EDT iOS » (html[data-theme="ios"])
+│   └── overlay.css  ← modal détail d'un cours
 └── js/
     ├── config.js    ← constantes (URL API, grille horaire, groupes)
     ├── utils.js     ← fonctions pures (dates, types, parsing)
@@ -119,7 +98,6 @@ edt-blagnac/
     ├── ui.js        ← interactions (semaine, groupes, modal)
     ├── api.js       ← appels réseau via le proxy
     ├── render.js    ← construction de la grille HTML
-    ├── theme.js     ← bascule carton/iOS, bande de 7 jours, Aujourd'hui
     ├── rooms.js     ← salles libres + cache des cours de la semaine
     ├── tutors.js    ← "Où est le prof ?"
     └── main.js      ← initialisation
