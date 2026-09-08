@@ -91,11 +91,6 @@ function layoutLanes(dayCourses) {
   return placed.map(p => ({ ...p, columns }));
 }
 
-/** Classe de focus jour (thème iOS : vue jour sur mobile). */
-function focusClass() {
-  return (typeof getFocusDay === 'function') ? ` focus-${getFocusDay()}` : '';
-}
-
 /**
  * Construit et injecte la grille HTML de l'emploi du temps.
  * @param {Array} courses  — cours normalisés
@@ -110,7 +105,7 @@ function buildGrid(courses) {
     state.currentWeek === getISOWeek(today) &&
     state.currentYear === getISOWeekYear(today);
 
-  let html = `<div class="schedule-wrap${focusClass()}"><div class="schedule-grid">`;
+  let html = `<div class="schedule-wrap"><div class="schedule-grid">`;
 
   // ── En-tête : coin vide + 5 jours ──
   html += `<div class="time-header"></div>`;
@@ -209,8 +204,6 @@ function buildGrid(courses) {
 
   html += `</div></div>`;
   document.getElementById('schedule-container').innerHTML = html;
-
-  if (typeof renderWeekStrip === 'function') renderWeekStrip();
 }
 
 // ════════════════════════════

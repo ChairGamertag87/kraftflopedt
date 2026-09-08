@@ -140,12 +140,6 @@ function closeSelectorOutside(e) {
 function updateWeekLabel() {
   document.getElementById('week-label').textContent =
     getWeekDates(state.currentWeek, state.currentYear).label;
-  // Éléments du thème iOS (titre mois/semaine, bande de jours, bouton Aujourd'hui)
-  if (typeof updateIosTitle === 'function') {
-    updateIosTitle();
-    updateTodayButton();
-    renderWeekStrip();
-  }
 }
 
 function changeWeek(delta) {

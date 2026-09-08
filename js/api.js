@@ -254,7 +254,6 @@ async function loadSchedule() {
 
     if (courses.length === 0) {
       _displayedCourses = [];
-      if (typeof renderWeekStrip === 'function') renderWeekStrip();
       document.getElementById('schedule-container').innerHTML = `
         <div class="state-box">
           <span class="state-icon">📭</span>
