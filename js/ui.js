@@ -144,8 +144,13 @@ function updateWeekLabel() {
 
 function changeWeek(delta) {
   state.currentWeek += delta;
-  if (state.currentWeek < 1)  { state.currentYear--; state.currentWeek = 52; }
-  if (state.currentWeek > 52) { state.currentYear++; state.currentWeek = 1;  }
+  if (state.currentWeek < 1) {
+    state.currentYear--;
+    state.currentWeek = getISOWeeksInYear(state.currentYear); // 52 ou 53
+  } else if (state.currentWeek > getISOWeeksInYear(state.currentYear)) {
+    state.currentYear++;
+    state.currentWeek = 1;
+  }
   updateWeekLabel();
   if (getSelectedGroup()) loadSchedule();
 }

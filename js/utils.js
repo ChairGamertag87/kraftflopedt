@@ -13,6 +13,25 @@ function getISOWeek(d) {
 }
 
 /**
+ * Retourne l'année ISO d'une date (celle à laquelle appartient sa semaine ISO).
+ * Le 1er janvier 2027 est en S53 de 2026 : getFullYear() donnerait 2027 et
+ * chargerait la mauvaise semaine.
+ */
+function getISOWeekYear(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  return date.getUTCFullYear();
+}
+
+/**
+ * Nombre de semaines ISO d'une année : 52, ou 53 si le 28 décembre tombe en S53
+ * (année commençant un jeudi, ou bissextile commençant un mercredi ; ex : 2026).
+ */
+function getISOWeeksInYear(year) {
+  return getISOWeek(new Date(year, 11, 28));
+}
+
+/**
  * Retourne les dates de début/fin d'une semaine ISO.
  */
 function getWeekDates(week, year) {

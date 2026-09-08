@@ -93,7 +93,7 @@ function buildGrid(courses) {
     date.setDate(weekDates.mon.getDate() + d);
     const isToday =
       state.currentWeek === getISOWeek(today) &&
-      state.currentYear === today.getFullYear() &&
+      state.currentYear === getISOWeekYear(today) &&
       d === todayDow;
 
     html += `
@@ -134,7 +134,7 @@ function buildGrid(courses) {
     const now = new Date();
     const isCurrentDay =
       state.currentWeek === getISOWeek(today) &&
-      state.currentYear === today.getFullYear() &&
+      state.currentYear === getISOWeekYear(today) &&
       d === todayDow;
 
     if (isCurrentDay) {
