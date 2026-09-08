@@ -73,6 +73,30 @@ function renderSchedule(rawData, dept, promo, groupFilter) {
 // ════════════════════════════
 
 /**
+ * Répartit les cours d'une journée qui se chevauchent en colonnes.
+ * Deux cours au même créneau existent (CM de promo + TD de groupe pendant une
+ * retouche d'EDT) : superposés, l'un des deux était invisible.
+ * @returns {Array<{c:object, col:number, columns:number}>}
+ */
+function layoutLanes(dayCourses) {
+  const sorted = dayCourses.slice().sort((a, b) => a.start - b.start || a.end - b.end);
+  const lanes  = [];   // fin du dernier cours de chaque colonne
+  const placed = sorted.map(c => {
+    let col = lanes.findIndex(end => end <= c.start + 1e-9);
+    if (col === -1) { lanes.push(c.end); col = lanes.length - 1; }
+    else lanes[col] = c.end;
+    return { c, col };
+  });
+  const columns = Math.max(1, lanes.length);
+  return placed.map(p => ({ ...p, columns }));
+}
+
+/** Classe de focus jour (thème iOS : vue jour sur mobile). */
+function focusClass() {
+  return (typeof getFocusDay === 'function') ? ` focus-${getFocusDay()}` : '';
+}
+
+/**
  * Construit et injecte la grille HTML de l'emploi du temps.
  * @param {Array} courses  — cours normalisés
  */
@@ -82,81 +106,56 @@ function buildGrid(courses) {
   const todayDow  = today.getDay() - 1; // 0 = Lundi
   const weekDates = getWeekDates(state.currentWeek, state.currentYear);
   const totalH    = (SLOT_MAX - SLOT_MIN) * SLOT_H * 2; // hauteur totale en px
+  const isThisWeek =
+    state.currentWeek === getISOWeek(today) &&
+    state.currentYear === getISOWeekYear(today);
 
-  let html = `<div class="schedule-wrap"><div class="schedule-grid">`;
+  let html = `<div class="schedule-wrap${focusClass()}"><div class="schedule-grid">`;
 
   // ── En-tête : coin vide + 5 jours ──
-  html += `<div class="time-header" style="height:48px;"></div>`;
+  html += `<div class="time-header"></div>`;
 
   for (let d = 0; d < 5; d++) {
     const date    = new Date(weekDates.mon);
     date.setDate(weekDates.mon.getDate() + d);
-    const isToday =
-      state.currentWeek === getISOWeek(today) &&
-      state.currentYear === getISOWeekYear(today) &&
-      d === todayDow;
+    const isToday = isThisWeek && d === todayDow;
 
     html += `
-      <div class="day-header${isToday ? ' today' : ''}">
+      <div class="day-header${isToday ? ' today' : ''}" data-day="${d}">
         ${DAYS[d]}
         <span>${date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
       </div>`;
   }
 
   // ── Colonne horaires ──
-  html += `<div style="display:flex;flex-direction:column;">`;
+  html += `<div class="time-col">`;
   for (let s = 0; s < SLOTS; s++) {
-    const h      = Math.floor(SLOT_MIN + s * 0.5);
-    const m      = s % 2 === 0 ? '00' : '30';
     const isHalf = s % 2 !== 0;
-    html += `
-      <div class="time-slot${isHalf ? ' half' : ''}" style="height:${SLOT_H}px;">
-        ${m === '00' ? h + 'h' : ''}
-      </div>`;
+    const label  = isHalf ? '' : formatClock((SLOT_MIN + s * 0.5) * 60);
+    html += `<div class="time-slot${isHalf ? ' half' : ''}" style="height:${SLOT_H}px;"><span>${label}</span></div>`;
   }
   html += `</div>`;
 
   // ── Colonnes jours ──
   for (let d = 0; d < 5; d++) {
-    html += `<div class="day-col" style="position:relative;height:${totalH}px;">`;
+    html += `<div class="day-col" data-day="${d}" style="height:${totalH}px;">`;
 
     // Lignes de fond (heures & demi-heures)
     for (let s = 0; s < SLOTS; s++) {
-      const isHour = s % 2 === 0;
-      html += `
-        <div style="
-          position:absolute; top:${s * SLOT_H}px; left:0; right:0; height:${SLOT_H}px;
-          border-bottom:1px solid rgba(139,105,20,${isHour ? 0.18 : 0.07});
-        "></div>`;
+      html += `<div class="grid-line${s % 2 === 0 ? ' hour' : ' half'}" style="top:${s * SLOT_H}px;height:${SLOT_H}px;"></div>`;
     }
 
     // Marqueur heure actuelle (aujourd'hui seulement)
-    const now = new Date();
-    const isCurrentDay =
-      state.currentWeek === getISOWeek(today) &&
-      state.currentYear === getISOWeekYear(today) &&
-      d === todayDow;
-
-    if (isCurrentDay) {
-      const nowH = now.getHours() + now.getMinutes() / 60;
+    if (isThisWeek && d === todayDow) {
+      const nowH = today.getHours() + today.getMinutes() / 60;
       if (nowH >= SLOT_MIN && nowH <= SLOT_MAX) {
         const pct = ((nowH - SLOT_MIN) / (SLOT_MAX - SLOT_MIN)) * 100;
-        html += `
-          <div style="
-            position:absolute; left:0; right:0; top:${pct}%; height:2px;
-            background:var(--red-stamp); opacity:0.7; z-index:15; pointer-events:none;
-          ">
-            <div style="
-              position:absolute; left:-4px; top:-4px; width:8px; height:8px;
-              border-radius:50%; background:var(--red-stamp);
-            "></div>
-          </div>`;
+        html += `<div class="now-line" style="top:${pct}%;"><div class="now-dot"></div></div>`;
       }
     }
 
-    // Cours du jour
-    const dayCourses = courses.filter(c => c.day === d);
-    dayCourses.forEach(c => {
+    // Cours du jour, répartis en colonnes s'ils se chevauchent
+    layoutLanes(courses.filter(c => c.day === d)).forEach(({ c, col, columns }) => {
       const idx = _displayedCourses.length;
       _displayedCourses.push(c);
 
@@ -164,15 +163,16 @@ function buildGrid(courses) {
       const topPct    = ((c.start - SLOT_MIN) / (SLOT_MAX - SLOT_MIN)) * 100;
       // Hauteur minimum = 30 min en pourcentage pour rester lisible
       const minH      = (0.5 / (SLOT_MAX - SLOT_MIN)) * 100;
-      const heightPct = Math.max(((durationH) / (SLOT_MAX - SLOT_MIN)) * 100, minH);
+      const heightPct = Math.max((durationH / (SLOT_MAX - SLOT_MIN)) * 100, minH);
+      const timeStr   = formatRange(c.start, c.end);
 
-      const h  = Math.floor(c.start), m  = Math.round((c.start % 1) * 60);
-      const h2 = Math.floor(c.end),   m2 = Math.round((c.end   % 1) * 60);
-      const timeStr = `${h}h${m.toString().padStart(2, '0')} → ${h2}h${m2.toString().padStart(2, '0')}`;
-
-      const customStyle = c.color
-        ? `background:${c.color}55; border-left-color:${c.color};`
-        : '';
+      let style = `top:${topPct}%;height:${heightPct}%;`;
+      if (columns > 1) {
+        // largeur utile = 100% moins les marges latérales (3px de chaque côté)
+        style += `left:calc(3px + ${col} * (100% - 6px) / ${columns});width:calc((100% - 6px) / ${columns} - 3px);right:auto;`;
+      }
+      // Couleur du module FlOpEDT : exposée en variable, chaque thème en dérive fond et bordure
+      if (c.color) style += `--accent:${c.color};`;
 
       // Cours court (<1h10) : layout compact sur une ligne
       const isShort = durationH < 1.17;
@@ -184,19 +184,21 @@ function buildGrid(courses) {
             <span class="course-name">${c.abbrev || c.name}</span>
             <span class="course-meta">${timeStr}</span>
           </div>
-          ${c.room !== '—' ? `<div class="course-meta">📍 ${c.room}</div>` : ''}`;
+          ${c.room !== '—' ? `<div class="course-meta course-room">📍 ${c.room}</div>` : ''}`;
       } else {
         innerHtml = `
-          <div class="course-type-badge">${typeLabel(c.type)}</div>
-          <div class="course-name">${c.abbrev || c.name}</div>
-          <div class="course-meta">${timeStr}</div>
-          ${c.room  !== '—' ? `<div class="course-meta">📍 ${c.room}</div>`  : ''}
-          ${c.tutor !== '—' ? `<div class="course-meta">👤 ${c.tutor}</div>` : ''}`;
+          <div class="course-head">
+            <span class="course-type-badge">${typeLabel(c.type)}</span>
+            <span class="course-name">${c.abbrev || c.name}</span>
+          </div>
+          <div class="course-meta course-time">${timeStr}</div>
+          ${c.room  !== '—' ? `<div class="course-meta course-room">📍 ${c.room}</div>`  : ''}
+          ${c.tutor !== '—' ? `<div class="course-meta course-tutor">👤 ${c.tutor}</div>` : ''}`;
       }
 
       html += `
-        <div class="course-card type-${c.type}"
-          style="top:${topPct}%;height:${heightPct}%;${customStyle}"
+        <div class="course-card type-${c.type}${c.color ? ' has-accent' : ''}"
+          style="${style}"
           onclick="showDetail(_displayedCourses[${idx}])">
           ${innerHtml}
         </div>`;
@@ -207,6 +209,8 @@ function buildGrid(courses) {
 
   html += `</div></div>`;
   document.getElementById('schedule-container').innerHTML = html;
+
+  if (typeof renderWeekStrip === 'function') renderWeekStrip();
 }
 
 // ════════════════════════════

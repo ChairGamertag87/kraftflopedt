@@ -62,6 +62,32 @@ function timeToFloat(t) {
 }
 
 /**
+ * Le thème iOS est-il actif ? (attribut data-theme posé sur <html>)
+ */
+function isIosTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'ios';
+}
+
+/**
+ * Minutes depuis minuit → libellé d'heure selon le thème :
+ * carton « 8h05 », iOS « 08:05 » (comme l'app flop!EDT).
+ */
+function formatClock(min) {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  const mm = String(m).padStart(2, '0');
+  return isIosTheme() ? `${String(h).padStart(2, '0')}:${mm}` : `${h}h${mm}`;
+}
+
+/**
+ * Plage horaire à partir d'heures décimales (8.5 → 8h30) :
+ * carton « 8h00 → 9h25 », iOS « 08:00 – 09:25 ».
+ */
+function formatRange(startH, endH) {
+  const sep = isIosTheme() ? ' – ' : ' → ';
+  return formatClock(Math.round(startH * 60)) + sep + formatClock(Math.round(endH * 60));
+}
+
+/**
  * Convertit un code de jour FlOpEDT en index 0-4 (0=Lundi).
  * L'API renvoie "m", "tu", "w", "th", "f".
  * @param {string|number} day

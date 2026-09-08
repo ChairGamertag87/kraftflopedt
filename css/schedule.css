@@ -13,6 +13,36 @@
   min-width: 700px;
 }
 
+/* ── Colonne horaires (conteneur) ── */
+.time-col { display: flex; flex-direction: column; }
+
+/* ── Lignes de fond des colonnes jours ── */
+.grid-line {
+  position: absolute;
+  left: 0; right: 0;
+  border-bottom: 1px solid rgba(139, 105, 20, 0.07);
+  pointer-events: none;
+}
+.grid-line.hour { border-bottom-color: rgba(139, 105, 20, 0.18); }
+
+/* ── Marqueur heure actuelle ── */
+.now-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: var(--red-stamp);
+  opacity: 0.7;
+  z-index: 15;
+  pointer-events: none;
+}
+.now-dot {
+  position: absolute;
+  left: -4px; top: -4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--red-stamp);
+}
+
 /* ── En-têtes de jours ── */
 .day-header {
   font-family: 'Caveat', cursive;
@@ -42,6 +72,7 @@
 }
 
 .time-header {
+  height: 48px;
   border-bottom: 2px dashed rgba(139, 105, 20, 0.3);
   background: #fdf8f0;
 }
@@ -127,6 +158,23 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Badge + nom : empilés (carton), sur une ligne (iOS) */
+.course-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.course-head .course-name { max-width: 100%; }
+
+/* Couleur du module FlOpEDT (variable --accent posée par render.js) */
+@supports (background: color-mix(in srgb, red 10%, white)) {
+  .course-card.has-accent {
+    border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 33%, #fdf8f0);
+  }
 }
 
 .course-type-badge {

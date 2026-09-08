@@ -111,9 +111,7 @@ async function selectTutor(name) {
 //  Affichage du planning d'un prof
 // ════════════════════════════
 
-function minToLabel(min) {
-  return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
-}
+function minToLabel(min) { return formatClock(min); }
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, ch =>
@@ -183,7 +181,7 @@ function renderTutorSchedule(name, courses) {
     daySlots.forEach(c => {
       const isCurrent = current === c;
       html += `<div class="tutor-slot${isCurrent ? ' current' : ''}">
-        <span>${minToLabel(c.start)} → ${minToLabel(c.end)}</span>
+        <span>${minToLabel(c.start)}${isIosTheme() ? ' – ' : ' → '}${minToLabel(c.end)}</span>
         <span class="tutor-room">📍 ${escapeHtml(c.room || '—')}</span>
         <span class="tutor-info"><b>${escapeHtml(c.module)}</b>${c.type ? ' · ' + escapeHtml(c.type) : ''}${c.groups ? ' · ' + escapeHtml(c.groups) : ''} · ${escapeHtml(c.dept)}</span>
       </div>`;

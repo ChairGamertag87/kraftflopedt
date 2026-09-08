@@ -140,6 +140,12 @@ function closeSelectorOutside(e) {
 function updateWeekLabel() {
   document.getElementById('week-label').textContent =
     getWeekDates(state.currentWeek, state.currentYear).label;
+  // Éléments du thème iOS (titre mois/semaine, bande de jours, bouton Aujourd'hui)
+  if (typeof updateIosTitle === 'function') {
+    updateIosTitle();
+    updateTodayButton();
+    renderWeekStrip();
+  }
 }
 
 function changeWeek(delta) {
@@ -326,9 +332,7 @@ function showDetail(c) {
   document.getElementById('d-badge').textContent = c.courseType || typeLabel(c.type);
   document.getElementById('d-badge').className   = `course-type-badge type-${c.type}`;
 
-  const h  = Math.floor(c.start), m  = Math.round((c.start % 1) * 60);
-  const h2 = Math.floor(c.end),   m2 = Math.round((c.end   % 1) * 60);
-  document.getElementById('d-time').textContent  = `${h}h${m.toString().padStart(2,'0')} → ${h2}h${m2.toString().padStart(2,'0')}`;
+  document.getElementById('d-time').textContent  = formatRange(c.start, c.end);
   document.getElementById('d-day').textContent   = DAYS[c.day] || '—';
   document.getElementById('d-room').textContent  = c.room  || '—';
   document.getElementById('d-tutor').textContent = c.tutor || '—';
