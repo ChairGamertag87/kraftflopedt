@@ -231,6 +231,67 @@
   border-radius: 2px;
 }
 
+/* ── Tutors modal (où est le prof ?) ── */
+.tutors-search {
+  width: 100%;
+  font-family: 'Special Elite', serif;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: #fdf8f0;
+  border: 1.5px solid var(--craft);
+  border-radius: 2px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  outline: none;
+}
+.tutors-search:focus { border-color: var(--craft-dark); }
+
+.tutors-list {
+  max-height: 22vh;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.tutors-list .sel-chip { padding: 7px 12px; font-size: 0.85rem; }
+
+.tutors-now {
+  font-family: 'Caveat', cursive;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(192, 128, 32, 0.12);
+  border-left: 3px solid var(--craft-dark);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.tutors-now.off { color: var(--ink-faded); font-weight: 400; }
+
+.tutors-day { margin-bottom: 14px; }
+.tutors-day.today .rooms-building-name { color: var(--red-stamp); }
+
+.tutor-slot {
+  display: grid;
+  grid-template-columns: 7.2em 5.5em 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.82rem;
+  color: var(--ink);
+  padding: 5px 6px;
+  border-bottom: 1px dotted rgba(139, 105, 20, 0.2);
+}
+.tutor-slot.current {
+  background: rgba(155, 42, 42, 0.08);
+  border-left: 3px solid var(--red-stamp);
+}
+.tutor-slot .tutor-room { font-weight: 600; color: #2a5a2a; }
+.tutor-slot .tutor-info { color: var(--ink-faded); }
+.tutor-slot .tutor-info b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 480px) {
+  .tutor-slot { grid-template-columns: 1fr 1fr; }
+  .tutor-slot .tutor-info { grid-column: 1 / -1; }
+}
+
 /* ── Error banner ── */
 .error-banner {
   background: rgba(155, 42, 42, 0.1);

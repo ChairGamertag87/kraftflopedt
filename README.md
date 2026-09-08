@@ -57,6 +57,15 @@ permet de partager un lien direct. Au chargement, l'URL a priorite sur la memoir
 locale ; la selection est appliquee des que les chips existent (liste locale de
 secours d'abord, arbre FlOpEDT ensuite) et l'EDT se charge sans clic.
 
+## Ou est le prof ?
+
+Le bouton "Ou est le prof ?" liste les enseignants (initiales FlOpEDT) ayant cours
+dans la semaine affichee, tous departements confondus, et montre pour l'un d'eux
+ses creneaux jour par jour avec la salle, le module et les groupes. Sur la semaine
+courante, un bandeau indique la salle ou il se trouve en ce moment ou son prochain
+cours du jour. Les cours de la semaine sont charges une fois et partages avec la
+recherche de salles libres (`ensureWeekCourses` dans `js/rooms.js`).
+
 ## Pourquoi un proxy ?
 
 FlOpEDT bloque les requêtes venant d'un domaine différent (protection CORS).
@@ -89,5 +98,7 @@ edt-blagnac/
     ├── ui.js        ← interactions (semaine, groupes, modal)
     ├── api.js       ← appels réseau via le proxy
     ├── render.js    ← construction de la grille HTML
+    ├── rooms.js     ← salles libres + cache des cours de la semaine
+    ├── tutors.js    ← "Où est le prof ?"
     └── main.js      ← initialisation
 ```

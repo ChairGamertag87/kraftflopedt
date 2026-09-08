@@ -25,9 +25,10 @@ function getRoomBuilding(name) {
 
 // Cache
 let _allRooms    = null;
-let _allCourses  = null;
+let _allCourses  = null;  // cours de la semaine, tous depts (partagé avec tutors.js)
 let _roomsWeek   = null;
 let _roomsYear   = null;
+let _coursesPromise = null; // chargement en cours, pour ne pas le lancer deux fois
 
 // État sélection
 let _roomsDay  = null;
@@ -150,34 +151,71 @@ async function fetchAllRooms() {
   return allRooms;
 }
 
+// Durées de secours si /fetch/constraints/ ne répond pas
+const FALLBACK_DURATIONS = { 'QCM': 20, 'Conf 45': 45, 'Conf': 90, 'Conf 2h': 120 };
+
+/**
+ * Charge les cours de la semaine courante pour tous les départements.
+ * Chaque cours garde de quoi servir aux salles libres ET au suivi des profs :
+ * { dept, room, day, start, end (minutes), tutor, module, type, groups }.
+ */
 async function fetchAllCoursesForWeek() {
   const allCourses = [];
-  const promises = DEPTS.map(dept => {
+  const promises = DEPTS.map(async dept => {
     const params = `dept=${dept}&week=${state.currentWeek}&year=${state.currentYear}&work_copy=0`;
-    return apiFetch('/fr/api/fetch/scheduledcourses/', params)
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data.results || []);
-        list.forEach(c => {
-          const course   = c.course || {};
-          const startMin = c.start_time ?? 480;
-          const day      = getDayIndex(c.day);
-          const room     = c.room?.name || null;
-          const type     = course.type || '';
-          const duration = { 'QCM': 20, 'Conf 45': 45, 'Conf': 90, 'Conf 2h': 120 }[type] || 85;
-
-          if (room && day >= 0) {
-            allCourses.push({
-              room, day,
-              start: startMin,             // minutes depuis minuit
-              end:   startMin + duration,  // minutes depuis minuit
-            });
-          }
+    try {
+      const [data, durations] = await Promise.all([
+        apiFetch('/fr/api/fetch/scheduledcourses/', params),
+        fetchDurations(dept),
+      ]);
+      const list = Array.isArray(data) ? data : (data.results || []);
+      list.forEach(c => {
+        const course   = c.course || {};
+        const module   = course.module || {};
+        const startMin = c.start_time ?? 480;
+        const day      = getDayIndex(c.day);
+        const type     = course.type || '';
+        const duration = durations[type] ?? FALLBACK_DURATIONS[type] ?? 85;
+        if (day < 0) return;
+        allCourses.push({
+          dept, day,
+          room:   c.room?.name || null,
+          start:  startMin,             // minutes depuis minuit
+          end:    startMin + duration,  // minutes depuis minuit
+          tutor:  c.tutor || '',
+          module: module.abbrev || module.name || '?',
+          type,
+          groups: (course.groups || []).map(g => g.name).join(', '),
         });
-      })
-      .catch(e => console.warn(`[ROOMS] Erreur cours ${dept}:`, e.message));
+      });
+    } catch (e) {
+      console.warn(`[ROOMS] Erreur cours ${dept}:`, e.message);
+    }
   });
   await Promise.all(promises);
   return allCourses;
+}
+
+/**
+ * Retourne les cours de la semaine courante (cache partagé salles/profs),
+ * rechargés seulement si la semaine affichée a changé.
+ */
+async function ensureWeekCourses() {
+  const stale = !_allCourses || _roomsWeek !== state.currentWeek || _roomsYear !== state.currentYear;
+  if (stale) {
+    if (!_coursesPromise) {
+      const week = state.currentWeek, year = state.currentYear;
+      _coursesPromise = fetchAllCoursesForWeek().then(courses => {
+        _allCourses = courses;
+        _roomsWeek  = week;
+        _roomsYear  = year;
+        _coursesPromise = null;
+        return courses;
+      }, e => { _coursesPromise = null; throw e; });
+    }
+    return _coursesPromise;
+  }
+  return _allCourses;
 }
 
 // ════════════════════════════
@@ -189,17 +227,15 @@ async function searchFreeRooms() {
 
   resultDiv.innerHTML = '<div class="rooms-hint"><span class="state-icon spin" style="font-size:1.2rem;">⟳</span> Chargement…</div>';
 
-  const needReload = !_allRooms || !_allCourses || _roomsWeek !== state.currentWeek || _roomsYear !== state.currentYear;
-  if (needReload) {
-    [_allRooms, _allCourses] = await Promise.all([fetchAllRooms(), fetchAllCoursesForWeek()]);
-    _roomsWeek = state.currentWeek;
-    _roomsYear = state.currentYear;
-  }
+  const [, courses] = await Promise.all([
+    _allRooms ? Promise.resolve(_allRooms) : fetchAllRooms().then(r => (_allRooms = r)),
+    ensureWeekCourses(),
+  ]);
 
   // Salles occupées à ce créneau (comparaison en minutes entières)
   const occupied = new Set();
-  _allCourses.forEach(c => {
-    if (c.day === _roomsDay && _roomsHour >= c.start && _roomsHour < c.end) {
+  courses.forEach(c => {
+    if (c.room && c.day === _roomsDay && _roomsHour >= c.start && _roomsHour < c.end) {
       occupied.add(c.room);
     }
   });

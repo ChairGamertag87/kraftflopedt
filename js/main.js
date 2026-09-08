@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeDetail();
       closeSelector();
       closeRooms();
+      closeTutors();
     }
   });
 });
