@@ -49,6 +49,14 @@ Le nginx du conteneur web relaie `/api/flopedt/*` vers l'adapter (plus vers FlOp
 donc le front n'attend plus jamais FlOpEDT. Les reponses portent `X-Cache: hit|stale|miss`
 et `X-Data-Fetched-At`. Etat du store : `GET /api/status`.
 
+## Selection memorisee
+
+Le trio departement / promo / groupe est sauvegarde dans `localStorage` a chaque
+choix de groupe et recopie dans l'URL (`?dept=INFO&promo=BUT2&group=2A`), ce qui
+permet de partager un lien direct. Au chargement, l'URL a priorite sur la memoire
+locale ; la selection est appliquee des que les chips existent (liste locale de
+secours d'abord, arbre FlOpEDT ensuite) et l'EDT se charge sans clic.
+
 ## Pourquoi un proxy ?
 
 FlOpEDT bloque les requêtes venant d'un domaine différent (protection CORS).

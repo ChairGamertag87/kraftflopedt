@@ -6,4 +6,7 @@ const state = {
   currentWeek: getISOWeek(new Date()),
   currentYear: new Date().getFullYear(),
   groupTree:   [],   // arbre des groupes chargé depuis l'API tree
+  // Sélection à restaurer au chargement (URL ou localStorage), consommée
+  // dès que les chips promo/groupe correspondants existent.
+  wanted:      null, // { promo, group } ou null
 };
