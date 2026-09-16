@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeSelector();
       closeRooms();
       closeTutors();
+      closeIcal();
     }
   });
 });

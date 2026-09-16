@@ -76,6 +76,11 @@
           🔍 Où est le prof ?
         </button>
 
+        <!-- Bouton abonnement agenda (iCal) -->
+        <button class="selector-btn rooms-btn" onclick="openIcal()" title="Ajouter cet emploi du temps à ton agenda">
+          📅 Agenda
+        </button>
+
       </div>
 
       <!-- Légende -->
@@ -193,6 +198,46 @@
       </div>
     </div>
 
+    <!-- ══ MODAL AGENDA (iCal) ══ -->
+    <div id="ical-overlay" class="selector-overlay" onclick="closeIcalOutside(event)">
+      <div class="selector-panel card" style="max-width:520px;">
+        <div class="tape"></div>
+        <button class="detail-close" onclick="closeIcal()">✕</button>
+
+        <div class="selector-section">
+          <div class="selector-section-title">📅 Ajouter à ton agenda</div>
+          <div class="ical-desc" id="ical-desc"></div>
+        </div>
+
+        <div id="ical-empty" class="rooms-hint" hidden>Choisis d'abord ton département et ta promo dans le sélecteur.</div>
+
+        <div id="ical-body">
+          <div class="selector-section">
+            <div class="selector-section-title">Lien d'abonnement</div>
+            <div class="ical-urlrow">
+              <input type="text" id="ical-url" class="tutors-search ical-url" readonly onclick="this.select()">
+              <button class="sel-chip" id="ical-copy" onclick="copyIcalUrl()">Copier</button>
+            </div>
+          </div>
+
+          <div class="selector-section">
+            <div class="selector-row ical-actions">
+              <a class="sel-chip" id="ical-google"   href="#" target="_blank" rel="noopener">Google Agenda</a>
+              <a class="sel-chip" id="ical-webcal"   href="#">Apple / Outlook</a>
+              <a class="sel-chip" id="ical-download" href="#" download>Fichier .ics</a>
+            </div>
+            <div class="rooms-hint ical-hint">
+              Abonne-toi plutôt que d'importer : l'agenda se met à jour seul.
+              Les changements arrivent avec environ 1 h de délai, puis selon la fréquence de rafraîchissement de ton application
+              (Google Agenda : jusqu'à 24 h).
+            </div>
+          </div>
+        </div>
+
+        <div class="card-fold"></div>
+      </div>
+    </div>
+
     <!-- ══ GRILLE EDT ══ -->
     <div class="card" id="schedule-card" style="animation-delay: 0.2s; padding: 20px 16px;">
       <div class="pin"></div>
@@ -260,6 +305,7 @@
   <script src="js/render.js"></script>
   <script src="js/rooms.js"></script>
   <script src="js/tutors.js"></script>
+  <script src="js/ical.js"></script>
   <script src="js/main.js"></script>
 
 </body>

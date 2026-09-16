@@ -311,3 +311,43 @@
   .controls-bar { flex-direction: column; align-items: stretch; }
   .selector-btn { justify-content: space-between; }
 }
+
+/* ── Abonnement agenda (iCal) ── */
+.ical-desc {
+  font-family: 'Special Elite', serif;
+  font-size: 0.9rem;
+  color: var(--ink-faded);
+  line-height: 1.5;
+}
+.ical-urlrow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.ical-url {
+  flex: 1;
+  min-width: 0;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+}
+.ical-urlrow .sel-chip { flex: none; padding: 8px 14px; }
+.ical-actions a.sel-chip {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.ical-hint {
+  text-align: left;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 12px 0 0;
+}
+.tutors-ical {
+  color: var(--craft-dark);
+  text-transform: none;
+  letter-spacing: 0;
+  text-decoration: underline dotted;
+  font-weight: normal;
+}
+.tutors-ical:hover { text-decoration: underline; }

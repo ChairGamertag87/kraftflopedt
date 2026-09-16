@@ -165,7 +165,8 @@ function renderTutorSchedule(name, courses) {
 
   const weekDates = getWeekDates(state.currentWeek, state.currentYear);
   const count = slots.length;
-  html += `<div class="rooms-count">${count} cours cette semaine</div>`;
+  html += `<div class="rooms-count">${count} cours cette semaine
+    · <a href="#" class="tutors-ical" onclick="openIcalTutor(${JSON.stringify(name).replace(/"/g, '&quot;')}); return false;">📅 S'abonner à son agenda</a></div>`;
 
   for (let d = 0; d < 5; d++) {
     const daySlots = slots.filter(c => c.day === d);
