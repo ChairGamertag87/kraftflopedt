@@ -21,7 +21,7 @@
   line-height: 1;
 }
 .week-btn:first-child { border-radius: 2px 0 0 2px; }
-.week-btn:last-child  { border-radius: 0 2px 2px 0; border-left: none; }
+.week-btn:last-child  { border-radius: 0 2px 2px 0; }
 .week-btn:hover       { background: var(--craft-dark); color: var(--craft-light); }
 
 .week-label {
