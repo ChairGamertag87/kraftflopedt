@@ -57,6 +57,22 @@ permet de partager un lien direct. Au chargement, l'URL a priorite sur la memoir
 locale ; la selection est appliquee des que les chips existent (liste locale de
 secours d'abord, arbre FlOpEDT ensuite) et l'EDT se charge sans clic.
 
+## Abonnement agenda (iCal)
+
+Le bouton "Agenda" donne un lien d'abonnement iCalendar pour la selection
+courante (Google Agenda, Apple Calendrier, Outlook, Thunderbird...). Les flux
+sont generes par l'adapter (`ical.js`) depuis son store local, FlOpEDT n'est
+jamais appele dans le chemin d'une requete :
+
+- `/ical/<dept>/<promo>.ics` : tous les cours d'une promo
+- `/ical/<dept>/<promo>/<groupe>.ics` : cours du groupe et de ses groupes parents (CM de promo inclus)
+- `/ical/prof/<dept>/<initiales>.ics` : cours d'un enseignant (lien dans "Ou est le prof ?")
+
+Les evenements couvrent les semaines entretenues par le store (WEEKS_BEHIND
+semaines passees jusqu'a la fin de l'annee universitaire), en heure
+Europe/Paris, avec un UID stable par cours (`sc-<id>@kraftflopedt.fr`) pour que
+les agendas mettent a jour au lieu de dupliquer. Cache HTTP de 10 min.
+
 ## Ou est le prof ?
 
 Le bouton "Ou est le prof ?" liste les enseignants (initiales FlOpEDT) ayant cours

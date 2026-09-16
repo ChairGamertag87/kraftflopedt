@@ -340,6 +340,17 @@ function start() {
   log(`emplois du temps toutes les ${Math.round(CONFIG.refreshCourses / 60000)} min, groupes/contraintes/salles toutes les ${Math.round(CONFIG.refreshStatic / 3600000)} h, depts ${CONFIG.depts.join(',')}`);
 }
 
+/**
+ * Entrees en memoire pour un endpoint, sans jamais declencher d'appel FlOpEDT.
+ * @param {string}   endpoint
+ * @param {Function} [predicate]  filtre optionnel sur l'entree ({ key, endpoint, params, fetchedAt, body })
+ */
+function entries(endpoint, predicate = () => true) {
+  const out = [];
+  for (const e of mem.values()) if (e.endpoint === endpoint && predicate(e)) out.push(e);
+  return out;
+}
+
 function status() {
   let courses = 0, statics = 0, oldest = null, newest = null;
   for (const e of mem.values()) {
@@ -356,4 +367,4 @@ function status() {
   };
 }
 
-module.exports = { ENDPOINTS, CONFIG, validate, get, refresh, start, status, weeksToMaintain };
+module.exports = { ENDPOINTS, CONFIG, validate, get, entries, refresh, start, status, weeksToMaintain };

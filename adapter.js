@@ -37,6 +37,7 @@ const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
 // ════════════════════════════════════════════════════
 
 const store = require('./store');
+const ical  = require('./ical');
 
 async function flopFetch(endpoint, params = {}) {
   return (await store.get(endpoint, params)).body;
@@ -512,6 +513,29 @@ const server = http.createServer(async (req, res) => {
       console.error('[ERR]', e.message);
       const isParam = /invalide|disponible|non autorise/.test(e.message);
       return send(res, isParam ? 400 : 503, { error: isParam ? e.message : `FlOpEDT indisponible et aucune donnee locale : ${e.message}` });
+    }
+  }
+
+  // Flux iCalendar : /ical/<dept>/<promo>[/<groupe>].ics ou /ical/prof/<dept>/<initiales>.ics
+  if (parsed.pathname.startsWith('/ical/')) {
+    const sel = ical.parsePath(parsed.pathname);
+    if (!sel) return send(res, 404, { error: 'Flux iCal inconnu. Formes : /ical/<dept>/<promo>.ics, /ical/<dept>/<promo>/<groupe>.ics, /ical/prof/<dept>/<initiales>.ics' });
+    try {
+      const out = await ical.build(sel);
+      if (!out) return send(res, 404, { error: 'Promo ou groupe inconnu pour ce departement', ...sel });
+      const fname = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_');
+      res.writeHead(200, {
+        'Content-Type':                'text/calendar; charset=utf-8',
+        'Content-Disposition':         `inline; filename="${fname}.ics"`,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control':               'public, max-age=600',
+        'Last-Modified':               new Date(out.lastModified).toUTCString(),
+        'X-Event-Count':               String(out.count),
+      });
+      return res.end(out.ics);
+    } catch (e) {
+      console.error('[ERR]', e.message);
+      return send(res, 503, { error: `Donnees indisponibles : ${e.message}` });
     }
   }
 

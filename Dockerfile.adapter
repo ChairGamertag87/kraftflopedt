@@ -3,7 +3,7 @@ FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY adapter.js store.js ./
+COPY adapter.js store.js ical.js ./
 
 # Store local des donnees FlOpEDT (volume nomme dans docker-compose.yml)
 RUN mkdir -p /data && chown node:node /data
