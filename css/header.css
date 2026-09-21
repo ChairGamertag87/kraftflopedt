@@ -17,12 +17,14 @@
 }
 
 .header-sub {
+  /* h1 pour le SEO : on neutralise le style navigateur par defaut */
+  margin: 0 0 20px;
   font-family: 'Special Elite', serif;
   font-size: 1rem;
+  font-weight: 400;
   color: var(--ink-faded);
   letter-spacing: 4px;
   text-transform: uppercase;
-  margin-bottom: 20px;
 }
 
 .doodle-line {
