@@ -1,5 +1,7 @@
 # KraftFlopEDT — IUT Blagnac
 
+Site en ligne : **[kraftflopedt.fr](https://kraftflopedt.fr)**
+
 Site web d'emploi du temps basé sur FlOpEDT, avec proxy Node.js pour contourner le CORS.
 
 ## Prérequis
