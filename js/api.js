@@ -286,8 +286,8 @@ async function loadSchedule() {
 
       showError(`Hors-ligne — données du cache (${agoText})`);
     } else {
-      showError(`Erreur : ${e.message} — Le serveur proxy (server.js) est-il lancé ? → node server.js puis http://localhost:3000`);
-      showDemoFallback(dept, promo, group);
+      showError(`Impossible de charger l'emploi du temps (${e.message})`);
+      showUnavailable();
     }
   }
 }

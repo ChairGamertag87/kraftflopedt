@@ -253,3 +253,6 @@
   color: var(--ink-faded);
   opacity: 0.7;
 }
+
+/* Bouton Réessayer de l'état indisponible */
+.state-retry { margin-top: 16px; }

@@ -20,6 +20,22 @@ function showLoading() {
 }
 
 /**
+ * Affiche l'état "indisponible" : FlOpEDT injoignable et aucun cache local.
+ * Remplace l'ancien mode démo qui affichait un faux emploi du temps et un
+ * message destiné au développeur (node server.js) aux étudiants.
+ */
+function showUnavailable() {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">📡</span>
+      Emploi du temps indisponible
+      <div class="state-sub">// flopedt.iut-blagnac.fr ne répond pas et aucune copie locale n'existe</div>
+      <button class="sel-chip state-retry" onclick="loadSchedule()">Réessayer</button>
+    </div>`;
+}
+
+/**
  * Affiche un message d'erreur dans la bannière.
  * @param {string} msg
  */
@@ -205,47 +221,4 @@ function buildGrid(courses) {
 
   html += `</div></div>`;
   document.getElementById('schedule-container').innerHTML = html;
-}
-
-// ════════════════════════════
-//  Mode démo (fallback CORS)
-// ════════════════════════════
-
-/**
- * Affiche un emploi du temps fictif quand l'API est inaccessible.
- * @param {string} dept
- * @param {string} promo
- * @param {string} group
- */
-function showDemoFallback(dept, promo, group) {
-  const demoRaw = [
-    { name: 'Algo & Struct. données', start: '08:00', end: '10:00', day: 1, room: 'A101',      tutor: 'M. Martin',   group: 'G1', type: 'cm'   },
-    { name: 'TP Programmation',       start: '10:15', end: '12:15', day: 1, room: 'Salle TP3', tutor: 'Mme. Dupont', group: 'G2', type: 'tp'   },
-    { name: 'Bases de données',       start: '13:30', end: '15:30', day: 2, room: 'B204',      tutor: 'M. Lefevre',  group: 'G1', type: 'td'   },
-    { name: 'Réseaux TD',             start: '08:00', end: '09:30', day: 3, room: 'C310',      tutor: 'M. Bernard',  group: 'G3', type: 'td'   },
-    { name: 'Mathématiques',          start: '09:45', end: '11:45', day: 3, room: 'Amphi A',   tutor: 'Mme. Petit',  group: '',   type: 'cm'   },
-    { name: 'DS Algo',                start: '14:00', end: '16:00', day: 4, room: 'Amphi B',   tutor: 'M. Martin',   group: '',   type: 'exam' },
-    { name: 'Dev Web',                start: '08:00', end: '10:00', day: 5, room: 'Salle TP1', tutor: 'Mme. Durand', group: 'G1', type: 'tp'   },
-    { name: 'Anglais',                start: '10:15', end: '12:15', day: 5, room: 'D105',      tutor: 'M. Smith',    group: 'G2', type: 'td'   },
-  ];
-
-  const demo = demoRaw.map(c => ({
-    ...c,
-    start: timeToFloat(c.start),
-    end:   timeToFloat(c.end),
-    day:   c.day - 1,
-    color: null,
-  }));
-
-  const filtered = group ? demo.filter(c => !c.group || c.group === group) : demo;
-  buildGrid(filtered);
-
-  // Notice mode démo
-  const notice = document.createElement('div');
-  notice.style.cssText =
-    'font-family:Inconsolata,monospace;font-size:0.75rem;color:var(--ink-faded);' +
-    'text-align:center;margin-top:12px;opacity:0.7;';
-  notice.textContent =
-    '// Mode démo — données fictives (API inaccessible depuis ce navigateur, CORS)';
-  document.getElementById('schedule-container').appendChild(notice);
 }
