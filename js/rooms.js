@@ -268,9 +268,9 @@ async function searchFreeRooms() {
   sortedBldgs.forEach(bldg => {
     html += `
       <div class="rooms-building">
-        <div class="rooms-building-name">${bldg}</div>
+        <div class="rooms-building-name">${escapeHtml(bldg)}</div>
         <div class="rooms-grid">
-          ${groups[bldg].map(r => `<div class="room-chip">${r}</div>`).join('')}
+          ${groups[bldg].map(r => `<div class="room-chip">${escapeHtml(r)}</div>`).join('')}
         </div>
       </div>`;
   });

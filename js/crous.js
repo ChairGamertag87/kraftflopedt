@@ -5,9 +5,8 @@
 const CROUS_DAY_NAMES = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const CROUS_MOMENT_LABEL = { matin: '🌅 Petit-déjeuner', midi: '🍽️ Déjeuner', soir: '🌙 Dîner' };
 
-function crousEscape(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+// Echappement HTML : escapeHtml (utils.js), partage avec la grille et les modales.
+const crousEscape = escapeHtml;
 
 let _crousData    = null;   // réponse de l'adapter
 let _crousPromise = null;

@@ -113,11 +113,6 @@ async function selectTutor(name) {
 
 function minToLabel(min) { return formatClock(min); }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, ch =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
-
 /**
  * Cours d'un prof, triés par jour puis heure, et cours en cours "maintenant"
  * si la semaine affichée est la semaine courante.

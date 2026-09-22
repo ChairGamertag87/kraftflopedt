@@ -62,6 +62,17 @@ function timeToFloat(t) {
 }
 
 /**
+ * Echappe une chaine avant insertion en innerHTML. Les donnees FlOpEDT
+ * (noms de modules, salles, profs) et CROUS ne sont pas de confiance :
+ * un simple "<" dans un nom cassait la carte, et un compte FlOpEDT
+ * compromis aurait pu injecter du script.
+ */
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, ch =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+/**
  * Minutes depuis minuit → « 8h05 ».
  */
 function formatClock(min) {

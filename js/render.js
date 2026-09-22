@@ -167,7 +167,8 @@ function buildGrid(courses) {
         style += `left:calc(3px + ${col} * (100% - 6px) / ${columns});width:calc((100% - 6px) / ${columns} - 3px);right:auto;`;
       }
       // Couleur du module FlOpEDT : exposée en variable, chaque thème en dérive fond et bordure
-      if (c.color) style += `--accent:${c.color};`;
+      // On n'accepte qu'une couleur hexa : la valeur part dans un attribut style
+      if (c.color && /^#[0-9a-f]{3,8}$/i.test(c.color)) style += `--accent:${c.color};`;
 
       // Cours court (<1h10) : layout compact sur une ligne
       const isShort = durationH < 1.17;
@@ -176,23 +177,23 @@ function buildGrid(courses) {
         innerHtml = `
           <div class="course-compact">
             <span class="course-type-badge">${typeLabel(c.type)}</span>
-            <span class="course-name">${c.abbrev || c.name}</span>
+            <span class="course-name">${escapeHtml(c.abbrev || c.name)}</span>
             <span class="course-meta">${timeStr}</span>
           </div>
-          ${c.room !== '—' ? `<div class="course-meta course-room">📍 ${c.room}</div>` : ''}`;
+          ${c.room !== '—' ? `<div class="course-meta course-room">📍 ${escapeHtml(c.room)}</div>` : ''}`;
       } else {
         innerHtml = `
           <div class="course-head">
             <span class="course-type-badge">${typeLabel(c.type)}</span>
-            <span class="course-name">${c.abbrev || c.name}</span>
+            <span class="course-name">${escapeHtml(c.abbrev || c.name)}</span>
           </div>
           <div class="course-meta course-time">${timeStr}</div>
-          ${c.room  !== '—' ? `<div class="course-meta course-room">📍 ${c.room}</div>`  : ''}
-          ${c.tutor !== '—' ? `<div class="course-meta course-tutor">👤 ${c.tutor}</div>` : ''}`;
+          ${c.room  !== '—' ? `<div class="course-meta course-room">📍 ${escapeHtml(c.room)}</div>`  : ''}
+          ${c.tutor !== '—' ? `<div class="course-meta course-tutor">👤 ${escapeHtml(c.tutor)}</div>` : ''}`;
       }
 
       html += `
-        <div class="course-card type-${c.type}${c.color ? ' has-accent' : ''}"
+        <div class="course-card type-${c.type}${style.includes('--accent') ? ' has-accent' : ''}"
           style="${style}"
           onclick="showDetail(_displayedCourses[${idx}])">
           ${innerHtml}
