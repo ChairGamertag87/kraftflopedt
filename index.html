@@ -77,38 +77,42 @@
 
       <div class="controls-bar">
 
-        <!-- Bouton sélection dept/promo/groupe → ouvre le modal -->
-        <button class="selector-btn" id="selector-btn" onclick="openSelector()">
-          <span class="selector-current" id="selector-label">INFO · —</span>
-          <span class="selector-arrow">▾</span>
-        </button>
+        <!-- Rangee principale : selection + navigation semaine -->
+        <div class="controls-main">
+          <!-- Bouton sélection dept/promo/groupe → ouvre le modal -->
+          <button class="selector-btn" id="selector-btn" onclick="openSelector()">
+            <span class="selector-current" id="selector-label">INFO · —</span>
+            <span class="selector-arrow">▾</span>
+          </button>
 
-        <!-- Navigation semaine -->
-        <div class="week-nav">
-          <button class="week-btn" onclick="changeWeek(-1)" aria-label="Semaine précédente">◀</button>
-          <div class="week-label" id="week-label">Semaine —</div>
-          <button class="week-btn" onclick="changeWeek(+1)" aria-label="Semaine suivante">▶</button>
+          <!-- Navigation semaine -->
+          <div class="week-nav">
+            <button class="week-btn" onclick="changeWeek(-1)" aria-label="Semaine précédente">◀</button>
+            <div class="week-label" id="week-label">Semaine —</div>
+            <button class="week-btn" onclick="changeWeek(+1)" aria-label="Semaine suivante">▶</button>
+          </div>
         </div>
 
-        <!-- Bouton salles libres -->
-        <button class="selector-btn rooms-btn" onclick="openRooms()">
-          🚪 Salles libres
-        </button>
+        <!-- Rangee d'outils : etiquettes epinglees sous une ligne pointillee -->
+        <div class="controls-tools">
+          <span class="controls-tools-label">Outils</span>
 
-        <!-- Bouton suivi prof -->
-        <button class="selector-btn rooms-btn" onclick="openTutors()">
-          🔍 Où est le prof ?
-        </button>
+          <button class="tool-btn rooms-btn" onclick="openRooms()">
+            <span class="tool-icon">🚪</span>Salles libres
+          </button>
 
-        <!-- Bouton abonnement agenda (iCal) -->
-        <button class="selector-btn rooms-btn" onclick="openIcal()" title="Ajouter cet emploi du temps à ton agenda">
-          📅 Agenda
-        </button>
+          <button class="tool-btn rooms-btn" onclick="openTutors()">
+            <span class="tool-icon">🔍</span>Où est le prof ?
+          </button>
 
-        <!-- Bouton menu du CROUS -->
-        <button class="selector-btn rooms-btn" id="crous-btn" onclick="openCrous()" title="Menu du Resto U' Blagnac">
-          🍽️ Menu du CROUS
-        </button>
+          <button class="tool-btn rooms-btn" onclick="openIcal()" title="Ajouter cet emploi du temps à ton agenda">
+            <span class="tool-icon">📅</span>Agenda
+          </button>
+
+          <button class="tool-btn rooms-btn" id="crous-btn" onclick="openCrous()" title="Menu du Resto U' Blagnac">
+            <span class="tool-icon">🍽️</span>Menu du CROUS
+          </button>
+        </div>
 
       </div>
 
