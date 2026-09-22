@@ -84,6 +84,25 @@ courante, un bandeau indique la salle ou il se trouve en ce moment ou son procha
 cours du jour. Les cours de la semaine sont charges une fois et partages avec la
 recherche de salles libres (`ensureWeekCourses` dans `js/rooms.js`).
 
+## Menu du CROUS
+
+Le bouton "Menu du CROUS" affiche les menus a venir du Resto U' Blagnac
+(CROUS de Toulouse-Occitanie, restaurant `r674`), jour par jour. La source est
+le flux XML officiel du CNOUS (`webservices-v2.crous-mobile.fr`, Licence
+Ouverte). Ce flux est en HTTP seul, donc impossible a appeler depuis la page en
+HTTPS : l'adapter (`crous.js`) le telecharge, le garde en cache 4 h sur le
+volume de donnees (`If-Modified-Since` envoye, cache perime servi si le CNOUS
+ne repond pas) et l'expose normalise en `GET /api/crous/menu`. Si le flux est
+injoignable et qu'aucun cache n'existe, repli sur l'API CROUStillant
+(restaurant `116`, usage non commercial).
+
+Le menu est indicatif : il peut differer de ce qui est reellement servi, la
+modale le rappelle. Un easter egg dedie a CroustOccitanie se cache dans la
+modale (taper "croust" au clavier, ou tapoter 5 fois le titre).
+
+Reglages par variables d'environnement de l'adapter : `CROUS_REGION`,
+`CROUS_RESTO_ID`, `CROUS_RESTO_NAME`, `CROUS_FALLBACK_ID`, `CROUS_TTL_MS`.
+
 ## Pourquoi un proxy ?
 
 FlOpEDT bloque les requêtes venant d'un domaine différent (protection CORS).

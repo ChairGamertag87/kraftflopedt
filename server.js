@@ -21,6 +21,11 @@ const url   = require('url');
 const PORT        = 3000;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
 
+// Menus CROUS (meme module qu'en prod dans l'adapter) : cache dans ./.data en dev
+process.env.DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '.data');
+const crous = require('./crous');
+crous.start();
+
 // ── Proxy restreint : seuls ces endpoints FlOpEDT sont relayés, en GET ──
 // (liste identique à docker/nginx.conf pour la prod)
 const PROXY_PREFIX  = '/api/flopedt';
@@ -50,6 +55,22 @@ const STATIC_DIR = path.join(__dirname);
 // ════════════════════════════════════════════════════
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
+
+  // ── Menus du Resto U' Blagnac : /api/crous/menu (comme docker/nginx.conf) ──
+  if (parsed.pathname === '/api/crous/menu') {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET' });
+      return res.end(JSON.stringify({ error: 'Méthode non autorisée' }));
+    }
+    crous.getMenus().then(out => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(out));
+    }).catch(err => {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+    return;
+  }
 
   // ── Route proxy : /api/flopedt/<endpoint FlOpEDT> ──
   // Même chemin et mêmes règles qu'en prod (docker/nginx.conf) :

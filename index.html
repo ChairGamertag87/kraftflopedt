@@ -105,6 +105,11 @@
           📅 Agenda
         </button>
 
+        <!-- Bouton menu du CROUS -->
+        <button class="selector-btn rooms-btn" id="crous-btn" onclick="openCrous()" title="Menu du Resto U' Blagnac">
+          🍽️ Menu du CROUS
+        </button>
+
       </div>
 
       <!-- Légende -->
@@ -262,6 +267,37 @@
       </div>
     </div>
 
+    <!-- ══ MODAL MENU CROUS ══ -->
+    <div id="crous-overlay" class="selector-overlay" onclick="closeCrousOutside(event)">
+      <div class="selector-panel card" style="max-width:560px;">
+        <div class="tape"></div>
+        <button class="detail-close" onclick="closeCrous()">✕</button>
+
+        <div class="selector-section">
+          <div class="selector-section-title crous-title" onclick="crousTitleTap()">🍽️ Menu du Resto U' Blagnac</div>
+          <div class="crous-warning">
+            ⚠️ Menu indicatif fourni par le CROUS de Toulouse-Occitanie : il peut légèrement différer
+            de ce qui est réellement servi, selon les arrivages et l'humeur du chef.
+          </div>
+        </div>
+
+        <div class="selector-section">
+          <div class="selector-section-title">Jour</div>
+          <div class="selector-row" id="crous-days">
+            <!-- Peuplé par JS -->
+          </div>
+        </div>
+
+        <div id="crous-result" class="rooms-result crous-result">
+          <div class="rooms-hint">⏳ On demande au chef…</div>
+        </div>
+
+        <div class="crous-meta" id="crous-meta"></div>
+
+        <div class="card-fold"></div>
+      </div>
+    </div>
+
     <!-- ══ GRILLE EDT ══ -->
     <div class="card" id="schedule-card" style="animation-delay: 0.2s; padding: 20px 16px;">
       <div class="pin"></div>
@@ -330,6 +366,7 @@
   <script src="js/rooms.js"></script>
   <script src="js/tutors.js"></script>
   <script src="js/ical.js"></script>
+  <script src="js/crous.js"></script>
   <script src="js/main.js"></script>
 
 </body>

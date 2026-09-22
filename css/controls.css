@@ -351,3 +351,111 @@
   font-weight: normal;
 }
 .tutors-ical:hover { text-decoration: underline; }
+
+/* ── Menu du CROUS ── */
+.crous-title { cursor: pointer; user-select: none; }
+.crous-warning {
+  font-family: 'Special Elite', serif;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink-faded);
+  background: rgba(192, 128, 32, 0.1);
+  border-left: 3px solid var(--craft-dark);
+  padding: 8px 12px;
+}
+.crous-result { max-height: 48vh; }
+.crous-date {
+  font-family: 'Caveat', cursive;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 10px;
+  text-transform: capitalize;
+}
+.crous-service { margin-bottom: 14px; }
+.crous-service-title {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.75rem;
+  color: var(--ink-faded);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 6px 0 8px;
+}
+.crous-cat { margin-bottom: 12px; }
+.crous-plats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  columns: 2;
+  column-gap: 14px;
+}
+.crous-plats li {
+  font-family: 'Special Elite', serif;
+  font-size: 0.9rem;
+  color: var(--ink);
+  padding: 3px 0 3px 16px;
+  position: relative;
+  break-inside: avoid;
+}
+.crous-plats li::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  color: var(--craft-dark);
+}
+.crous-meta {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  color: var(--ink-faded);
+  margin-top: 12px;
+  text-align: right;
+}
+@media (max-width: 480px) {
+  .crous-plats { columns: 1; }
+}
+
+/* ── Easter egg CroustOccitanie ── */
+.croust-rain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 9500;
+}
+.croust-rain span {
+  position: absolute;
+  top: -3rem;
+  animation: croust-fall linear both;
+}
+@keyframes croust-fall {
+  to { transform: translateY(120vh) rotate(540deg); }
+}
+.croust-stamp {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 9600;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  font-family: 'Special Elite', serif;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--red-stamp);
+  border: 4px double var(--red-stamp);
+  border-radius: 6px;
+  padding: 14px 26px;
+  background: rgba(253, 248, 240, 0.92);
+  box-shadow: 4px 4px 0 rgba(44, 26, 0, 0.2);
+  animation: croust-stamp 4.6s ease both;
+}
+.croust-stamp b { font-family: 'Caveat', cursive; font-size: 2.2rem; letter-spacing: 0; text-transform: none; display: block; }
+.croust-stamp small { display: block; font-size: 0.7rem; letter-spacing: 1px; margin-top: 6px; color: var(--ink-faded); }
+@keyframes croust-stamp {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(2.2); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(0.95); }
+}

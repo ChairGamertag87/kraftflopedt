@@ -6,12 +6,14 @@
  *   GET /groups?dept=INFO
  *   GET /free-rooms?week=9&year=2026&day=m&start=480&end=565&dept=INFO
  *   GET /current-week
+ *   GET /crous/menu          (menus du Resto U' Blagnac, flux CNOUS, voir crous.js)
  *
  * Returns clean, flat, predictable JSON.
  *
  * Sert aussi les 4 endpoints bruts de FlOpEDT utilises par le front, sous
  * /api/flopedt/<endpoint FlOpEDT> (le nginx du conteneur web les relaie ici),
  * et GET /status (etat du store, expose en /api/status par nginx).
+ * GET /crous/menu (expose en /api/crous/menu) : menus du Resto U' Blagnac (crous.js).
  *
  * Toutes les donnees viennent d'un store local (store.js) rafraichi en tache de
  * fond : FlOpEDT n'est jamais appele dans le chemin d'une requete visiteur, sauf
@@ -38,6 +40,7 @@ const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
 
 const store = require('./store');
 const ical  = require('./ical');
+const crous = require('./crous');
 
 async function flopFetch(endpoint, params = {}) {
   return (await store.get(endpoint, params)).body;
@@ -251,6 +254,7 @@ const OPENAPI_SPEC = {
     { name: 'Groups',   description: 'Group hierarchy' },
     { name: 'Rooms',    description: 'Room availability' },
     { name: 'Utility',  description: 'Helpers' },
+    { name: 'CROUS',    description: "Menus du Resto U' Blagnac (flux CNOUS)" },
   ],
   paths: {
     '/courses': {
@@ -308,6 +312,18 @@ const OPENAPI_SPEC = {
         summary: 'Get the current ISO week and year',
         responses: {
           200: { description: 'Current week info', content: { 'application/json': { schema: { $ref: '#/components/schemas/CurrentWeekResponse' } } } },
+        },
+      },
+    },
+    '/crous/menu': {
+      get: {
+        tags: ['CROUS'],
+        summary: "Menus a venir du Resto U' Blagnac (CROUS de Toulouse-Occitanie)",
+        description: 'Source : flux XML officiel du CNOUS (r674, region toulouse), cache 4 h cote serveur. '
+                   + 'Repli sur l\'API CROUStillant si le flux est injoignable. Les menus sont indicatifs et peuvent differer de ce qui est servi.',
+        responses: {
+          200: { description: 'Menus normalises, du jour courant aux jours suivants publies', content: { 'application/json': { schema: { $ref: '#/components/schemas/CrousMenuResponse' } } } },
+          503: { description: 'Aucune source disponible', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -387,6 +403,41 @@ const OPENAPI_SPEC = {
           },
         },
       },
+      CrousMenuResponse: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            properties: {
+              restaurant:   { type: 'object', properties: { id: { type: 'string', example: 'r674' }, nom: { type: 'string', example: "Resto U' Blagnac" }, adresse: { type: 'string' }, horaires: { type: 'string' } } },
+              region:       { type: 'string', example: 'toulouse' },
+              source:       { type: 'string', enum: ['cnous', 'croustillant'] },
+              fetchedAt:    { type: 'string', format: 'date-time' },
+              lastModified: { type: 'string', nullable: true },
+              stale:        { type: 'boolean', description: 'true si le flux n\'a pas pu etre rafraichi et que le cache est perime' },
+              days: { type: 'array', items: {
+                type: 'object',
+                properties: {
+                  date:     { type: 'string', example: '2026-09-22' },
+                  services: { type: 'array', items: {
+                    type: 'object',
+                    properties: {
+                      moment:     { type: 'string', enum: ['matin', 'midi', 'soir'] },
+                      categories: { type: 'array', items: {
+                        type: 'object',
+                        properties: {
+                          libelle: { type: 'string', example: 'Menu traditionnel' },
+                          plats:   { type: 'array', items: { type: 'string' }, example: ['Cuisse de poulet', 'Semoule aux raisins'] },
+                        },
+                      } },
+                    },
+                  } },
+                },
+              } },
+            },
+          },
+        },
+      },
       Error: {
         type: 'object',
         properties: {
@@ -443,6 +494,12 @@ const ROUTES = {
                             end:   q.end,
                           }),
   '/current-week':  () => getCurrentWeek(),
+  '/crous/menu':    async () => {
+                      // Jours passes retires : le flux CNOUS garde parfois la semaine entiere
+                      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+                      const out = await crous.getMenus();
+                      return { ...out, days: (out.days || []).filter(d => d.date >= today) };
+                    },
   '/':              () => ({
     name: 'KraftFlopEDT Adapter',
     version: '1.0',
@@ -453,6 +510,7 @@ const ROUTES = {
       'GET /groups?dept=INFO',
       'GET /free-rooms?week=9&year=2026&dept=INFO&day=m&start=480&end=565',
       'GET /current-week',
+      'GET /crous/menu',
     ],
   }),
 };
@@ -492,7 +550,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, OPENAPI_SPEC);
   }
   if (parsed.pathname === '/status') {
-    return send(res, 200, store.status());
+    return send(res, 200, { ...store.status(), crous: crous.status() });
   }
 
   // Endpoints bruts FlOpEDT pour le front (js/api.js) : /api/flopedt/fr/api/...
@@ -553,6 +611,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 store.start();
+crous.start();
 
 server.listen(PORT, () => {
   console.log(`\n  KraftFlopEDT Adapter → https://kraftflopedt.habibiserver.dev`);
@@ -561,6 +620,7 @@ server.listen(PORT, () => {
   console.log('  Endpoints:');
   for (const r of Object.keys(ROUTES).filter(r => r !== '/')) console.log(`    GET ${r}`);
   console.log(`    GET /status`);
+  console.log(`    GET /crous/menu`);
   console.log(`    GET ${RAW_PREFIX}<endpoint FlOpEDT>  (${Object.keys(store.ENDPOINTS).length} endpoints)`);
   console.log('');
 });

@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeRooms();
       closeTutors();
       closeIcal();
+      closeCrous();
     }
   });
 });
