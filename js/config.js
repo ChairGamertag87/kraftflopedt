@@ -2,9 +2,6 @@
    CONFIG.JS — Constantes globales de l'application
    ══════════════════════════════════════════════════ */
 
-// ── API ──
-const API_BASE = 'https://flopedt.iut-blagnac.fr';
-
 // ── Grille horaire ──
 // Bornes calées sur les vrais créneaux de l'IUT de Blagnac
 // start_time dans l'API = minutes depuis minuit (480=8h, 570=9h30...)

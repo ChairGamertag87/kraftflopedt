@@ -46,45 +46,6 @@ function showError(msg) {
 }
 
 // ════════════════════════════
-//  Entrée principale
-// ════════════════════════════
-
-/**
- * Normalise les données brutes de l'API puis délègue à buildGrid.
- * @param {object|Array} rawData     — réponse brute de l'API
- * @param {string}       dept
- * @param {string}       promo
- * @param {string}       groupFilter — filtre groupe optionnel
- */
-function renderSchedule(rawData, dept, promo, groupFilter) {
-  // Normalisation du format de réponse (plusieurs formes possibles)
-  let courses = [];
-  if (Array.isArray(rawData))                         courses = rawData;
-  else if (rawData && Array.isArray(rawData.results)) courses = rawData.results;
-  else if (rawData && Array.isArray(rawData.cours))   courses = rawData.cours;
-
-  if (!courses.length) {
-    document.getElementById('schedule-container').innerHTML = `
-      <div class="state-box">
-        <span class="state-icon">📭</span>
-        Aucun cours cette semaine
-        <div class="state-sub">// semaine libre ou données indisponibles</div>
-      </div>`;
-    return;
-  }
-
-  // Normalise chaque cours et filtre les jours inconnus
-  const parsed = courses.map(c => normaliseCourse(c)).filter(c => c.day >= 0);
-
-  // Filtre groupe côté client si nécessaire
-  const filtered = groupFilter
-    ? parsed.filter(c => !c.group || c.group.toLowerCase().includes(groupFilter.toLowerCase()))
-    : parsed;
-
-  buildGrid(filtered);
-}
-
-// ════════════════════════════
 //  Construction de la grille
 // ════════════════════════════
 
