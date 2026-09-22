@@ -229,7 +229,13 @@ function cacheCleanup() {
 //  Point d'entrée principal
 // ════════════════════════════
 
+// Numero de sequence du dernier chargement demande. Trois clics rapides sur la
+// fleche lancaient trois fetch et la reponse la plus lente ecrasait la grille,
+// quelle que soit la semaine affichee dans l'en-tete.
+let _loadSeq = 0;
+
 async function loadSchedule() {
+  const seq   = ++_loadSeq;
   const dept  = getSelectedDept();
   const promo = getSelectedPromo();
   const group = getSelectedGroup();
@@ -250,7 +256,10 @@ async function loadSchedule() {
   try {
     const courses = await fetchSchedule(dept, promo, group);
 
+    // Le cache est toujours ecrit sous la bonne cle ; seul l'affichage est
+    // reserve au dernier chargement demande.
     cacheSave(dept, promo, group, week, year, courses);
+    if (seq !== _loadSeq) return;
 
     if (courses.length === 0) {
       _displayedCourses = [];
@@ -265,6 +274,7 @@ async function loadSchedule() {
     }
   } catch (e) {
     console.error('[EDT]', e);
+    if (seq !== _loadSeq) return;
 
     if (cached && cached.courses && cached.courses.length > 0) {
       const age = Date.now() - cached.ts;
