@@ -17,26 +17,32 @@ const SLOTS    = (SLOT_MAX - SLOT_MIN) * 2; // 22 créneaux
 const DAYS       = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
 const DAYS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
 
-// ── Groupes fallback (clés promo = valeurs réelles de l'API) ──
+// ── Groupes de secours (si l'arbre FlOpEDT ne charge pas) ──
+// Cles promo = valeurs reelles du champ promo de l'arbre, groupes = feuilles.
+// Releve le 22 sept 2026 sur /fr/api/groups/structural/tree/ pour chaque dept.
+// L'ancien repli RT declarait RT1/RT2/RT3 : un etudiant RT ne pouvait choisir
+// aucune promo reelle quand l'arbre echouait.
 const GROUPS = {
   INFO: {
     BUT1: ['1A','1B','2A','2B','3A','3B','4A','4B'],
-    BUT2: ['1A','1B','2A','2B','3A','3B'],
-    BUT3: ['3A','3B'],
+    BUT2: ['1A','1B','2A','2B','3A'],
+    BUT3: ['1A','1B','2A','3A'],
   },
   RT: {
-    RT1: ['1A','1B','2A','2B','3A','3B'],
-    RT2: ['1A','1B','2A','2B'],
-    RT3: ['1'],
+    BUT1:  ['1A','1B','1C','1D','1E','1F'],
+    BUT2:  ['2A','2B','2C'],
+    BUT2A: ['2Aa'],
+    BUT3:  ['3A','3B'],
+    BUT3A: ['3Aa','3Ba'],
   },
   CS: {
     CS1: ['1GA','1GB1','1GB2','1GC'],
-    CS2: ['2GA','2GB','2GC','2GD'],
-    CS3: ['3A','3B'],
+    CS2: ['2G1','2G2'],
+    CS3: ['3FA1','3FA2','3FI'],
   },
   GIM: {
     GIM1: ['1A','1B','1C','1D'],
     GIM2: ['2A','2B','2C','2D'],
-    GIM3: ['3A','3B'],
+    GIM3: ['3A','3B','3C'],
   },
 };
