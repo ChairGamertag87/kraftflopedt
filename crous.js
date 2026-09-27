@@ -149,7 +149,10 @@ function decodeEntities(s) {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
     if (code[0] === '#') {
       const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+      // String.fromCodePoint leve une RangeError au-dela de U+10FFFF ou sur un
+      // demi-codet : une entite farfelue dans le flux CNOUS ne doit pas planter la route
+      if (!Number.isFinite(n) || n <= 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF)) return m;
+      return String.fromCodePoint(n);
     }
     return ENTITIES[code] ?? m;
   });
