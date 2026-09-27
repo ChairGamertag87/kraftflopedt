@@ -17,7 +17,14 @@
  *   CROUS_REGION   slug du CROUS                 (defaut toulouse)
  *   CROUS_RESTO    id du restaurant dans le flux (defaut r674 = Resto U' Blagnac)
  *   CROUS_TTL_MS   TTL du fichier brut           (defaut 14400000 = 4 h)
+ *   CROUS_WAIT_MS  attente max d'un visiteur pendant un rafraichissement (defaut 3000)
+ *   CROUS_RETRY_MS delai entre deux essais apres un echec            (defaut 300000 = 5 min)
  *   DATA_DIR       dossier de stockage           (defaut /data, sous-dossier crous/)
+ *
+ * Un visiteur n'attend jamais le CNOUS plus de CROUS_WAIT_MS : cache perime
+ * servi tel quel pendant que le flux se recharge en fond, et pas de nouvel
+ * essai avant CROUS_RETRY_MS apres un echec (sinon chaque requete attendait le
+ * timeout de 20 s tant que le CNOUS etait en panne).
  */
 
 const fs    = require('fs');
@@ -28,11 +35,14 @@ const https = require('https');
 const CONFIG = {
   region:   (process.env.CROUS_REGION || 'toulouse').replace(/[^a-z0-9-]/g, ''),
   resto:    (process.env.CROUS_RESTO  || 'r674').replace(/[^a-z0-9]/gi, ''),
-  ttl:      Number(process.env.CROUS_TTL_MS) || 4 * 60 * 60 * 1000,
+  ttl:      Number(process.env.CROUS_TTL_MS)   || 4 * 60 * 60 * 1000,
+  wait:     Number(process.env.CROUS_WAIT_MS)  || 3000,
+  retry:    Number(process.env.CROUS_RETRY_MS) || 5 * 60 * 1000,
   dataDir:  path.join(process.env.DATA_DIR || '/data', 'crous'),
   timeout:  20000,
-  // Repli CROUStillant : code du restaurant chez eux (Blagnac = 116)
-  fallback: { host: 'api.croustillant.menu', code: process.env.CROUS_FALLBACK_CODE || '116', days: 7 },
+  // Repli CROUStillant : code du restaurant chez eux (Blagnac = 116), appels en
+  // parallele et resultat garde en memoire (ttl) pour ne pas refaire 5 appels par visite
+  fallback: { host: 'api.croustillant.menu', code: process.env.CROUS_FALLBACK_CODE || '116', days: 7, timeout: 10000 },
 };
 
 // Infos fixes du restaurant (le flux resto.xml les donne aussi, mais en HTML libre)
@@ -132,11 +142,32 @@ function fetchFeed() {
   return inFlight;
 }
 
-/** Garantit un flux pas plus vieux que le TTL ; en cas d'echec, garde l'ancien. */
+let lastAttemptAt = 0; // dernier lancement de fetchFeed (succes ou echec)
+
+function tryFetch() {
+  lastAttemptAt = Date.now();
+  return fetchFeed();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Garantit un flux pas plus vieux que le TTL, sans jamais bloquer le visiteur
+ * plus de CONFIG.wait : passe ce delai le cache perime est servi (stale) et le
+ * telechargement continue en fond. Apres un echec, pas de nouvel essai avant
+ * CONFIG.retry : les requetes suivantes repondent immediatement.
+ */
 async function ensureFresh() {
   if (cache && ageMs() < CONFIG.ttl) return { ok: true, fromCache: true };
-  try { await fetchFeed(); return { ok: true, fromCache: false }; }
-  catch (e) { return { ok: false, error: e.message }; }
+
+  const canRetry = !inFlight && Date.now() - lastAttemptAt >= CONFIG.retry;
+  if (!inFlight && !canRetry) return { ok: false, error: state.lastError || 'flux injoignable' };
+
+  const attempt = (inFlight || tryFetch()).then(() => ({ ok: true, fromCache: false }), e => ({ ok: false, error: e.message }));
+  attempt.catch(() => {});
+  const res = await Promise.race([attempt, sleep(CONFIG.wait).then(() => null)]);
+  if (res) return res;
+  return { ok: false, error: `rafraichissement en cours (plus de ${CONFIG.wait / 1000} s)` };
 }
 
 // ════════════════════════════════════════════════════
@@ -290,7 +321,7 @@ function getJson(host, p) {
       });
       res.on('error', reject);
     });
-    req.setTimeout(CONFIG.timeout, () => req.destroy(new Error('timeout repli')));
+    req.setTimeout(CONFIG.fallback.timeout, () => req.destroy(new Error('timeout repli')));
     req.on('error', reject);
   });
 }
@@ -304,16 +335,27 @@ function fmtISO(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+let fallbackCache = null; // { at, days } : resultat du repli, garde CONFIG.ttl (5 min si vide)
+
 async function fetchFallback() {
-  const days = [];
+  if (fallbackCache && Date.now() - fallbackCache.at < (fallbackCache.days.length ? CONFIG.ttl : CONFIG.retry)) {
+    return fallbackCache.days;
+  }
   const today = new Date();
+  const dates = [];
   for (let i = 0; i < CONFIG.fallback.days; i++) {
     const d = new Date(today); d.setDate(today.getDate() + i);
     if (d.getDay() === 0 || d.getDay() === 6) continue; // RU ferme le week-end
-    state.fallbackCalls++;
-    const json = await getJson(CONFIG.fallback.host, `/v1/restaurants/${CONFIG.fallback.code}/menu/${fmtDDMMYYYY(d)}`).catch(() => null);
-    const repas = json?.data?.repas;
-    if (!Array.isArray(repas)) continue;
+    dates.push(d);
+  }
+  state.fallbackCalls += dates.length;
+  const results = await Promise.all(dates.map(d =>
+    getJson(CONFIG.fallback.host, `/v1/restaurants/${CONFIG.fallback.code}/menu/${fmtDDMMYYYY(d)}`).catch(() => null)));
+
+  const days = [];
+  dates.forEach((d, i) => {
+    const repas = results[i]?.data?.repas;
+    if (!Array.isArray(repas)) return;
     const services = repas.map(r => ({
       moment: normaliseMoment(r.type || 'midi'),
       categories: (r.categories || []).map(c => ({
@@ -322,7 +364,8 @@ async function fetchFallback() {
       })).filter(c => c.plats.length),
     })).filter(s => s.categories.length);
     if (services.length) days.push({ date: fmtISO(d), services });
-  }
+  });
+  fallbackCache = { at: Date.now(), days };
   return days;
 }
 
@@ -365,6 +408,8 @@ function status() {
   return {
     region: CONFIG.region, resto: CONFIG.resto, ttlMs: CONFIG.ttl,
     cached: !!cache, fetchedAt: cache?.fetchedAt || null, lastModified: cache?.lastModified || null,
+    lastAttemptAt: lastAttemptAt ? new Date(lastAttemptAt).toISOString() : null, inFlight: !!inFlight,
+    fallbackCachedAt: fallbackCache ? new Date(fallbackCache.at).toISOString() : null,
     ...state,
   };
 }
@@ -372,7 +417,7 @@ function status() {
 function start() {
   loadFromDisk();
   // Premier telechargement en fond pour que la premiere visite ne l'attende pas
-  ensureFresh().catch(() => {});
+  if (!cache || ageMs() >= CONFIG.ttl) tryFetch().catch(() => {});
 }
 
 module.exports = { CONFIG, RESTAURANT, getMenus, status, start, parseMenuHtml, parseFeed, ensureFresh };
