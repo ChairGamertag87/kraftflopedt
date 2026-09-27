@@ -141,7 +141,7 @@ async function loadDurations(dept) {
 function isGroupVisible(courseGroup, selectedGroup, ancestors) {
   if (!courseGroup) return true;
   if (courseGroup === selectedGroup) return true;
-  return (ancestors[selectedGroup] || []).includes(courseGroup);
+  return (Object.hasOwn(ancestors, selectedGroup) ? ancestors[selectedGroup] : []).includes(courseGroup);
 }
 
 // ════════════════════════════════════════════════════
@@ -161,7 +161,8 @@ async function build(sel) {
     name = `${sel.tutor} · ${dept}`;
   } else {
     if (!sel.promo || !groups.promos.includes(sel.promo)) return null;
-    if (sel.group && !(sel.group in groups.byPromo[sel.promo])) return null;
+    // Object.hasOwn : "constructor" in {} est vrai et faisait planter le filtre (503)
+    if (sel.group && !Object.hasOwn(groups.byPromo[sel.promo], sel.group)) return null;
     name = [dept, sel.promo, sel.group].filter(Boolean).join(' · ');
   }
 
