@@ -50,23 +50,30 @@ function buildAncestorMap(nodes, ancestors, map) {
  * Une erreur est propagée : sans l'arbre, le filtre ne garderait que le groupe
  * exact (CM de promo et TD du groupe parent disparaissaient sans message, et ce
  * résultat incomplet était ensuite mis en cache comme s'il était bon).
+ * Une table par promo : les trois racines INFO s'appellent toutes "CE" et les
+ * groupes 1A, 1B... existent dans chaque promo, une table unique se faisait
+ * écraser par la dernière promo parcourue (même logique que ical.js côté serveur).
  * @param {string} dept
+ * @param {string} [promo]  promo sélectionnée ; sans promo, toutes les tables sont fusionnées
  * @returns {Promise<Object>}  — { "1A": ["1","CE"], "CE": [], ... }
  */
-async function fetchAncestorMap(dept) {
+async function fetchAncestorMap(dept, promo) {
   let tree;
   try {
     tree = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
   } catch (e) {
     throw new Error(`arbre des groupes indisponible : ${e.message}`);
   }
-  const map = {};
+  const byPromo = {}, merged = {};
   // L'arbre est un tableau de racines (une par promo : BUT1, BUT2, BUT3)
   for (const root of tree) {
+    const p   = root.promo || root.promotxt || root.buttxt || root.name;
+    const map = byPromo[p] || (byPromo[p] = {});
     map[root.name] = [];
     if (root.children) buildAncestorMap(root.children, [root.name], map);
+    Object.assign(merged, map);
   }
-  return map;
+  return (promo && byPromo[promo]) || merged;
 }
 
 /**
@@ -132,7 +139,7 @@ async function fetchSchedule(dept, promo, group) {
   const [raw, durations, ancestorMap] = await Promise.all([
     apiFetch('/fr/api/fetch/scheduledcourses/', params),
     fetchDurations(dept),
-    fetchAncestorMap(dept),
+    fetchAncestorMap(dept, promo),
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);

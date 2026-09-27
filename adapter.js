@@ -82,15 +82,22 @@ function buildAncestorMap(nodes, ancestors, map) {
   }
 }
 
-async function fetchAncestorMap(dept) {
+/**
+ * Une table d'ancetres par promo (les racines INFO s'appellent toutes "CE" et
+ * 1A existe dans chaque promo) ; sans promo, les tables sont fusionnees.
+ */
+async function fetchAncestorMap(dept, promo) {
   try {
     const tree = await flopFetch('/fr/api/groups/structural/tree/', { dept });
-    const map  = {};
+    const byPromo = {}, merged = {};
     for (const root of tree) {
+      const p   = root.promo || root.promotxt || root.buttxt || root.name;
+      const map = byPromo[p] || (byPromo[p] = {});
       map[root.name] = [];
       if (root.children) buildAncestorMap(root.children, [root.name], map);
+      Object.assign(merged, map);
     }
-    return map;
+    return (promo && byPromo[promo]) || merged;
   } catch { return {}; }
 }
 
@@ -155,7 +162,7 @@ async function getCourses({ week, year, dept, promo, group }) {
   const [raw, durations, ancestorMap] = await Promise.all([
     flopFetch('/fr/api/fetch/scheduledcourses/', { dept, week, year, work_copy: 0 }),
     fetchDurations(dept),
-    group ? fetchAncestorMap(dept) : Promise.resolve({}),
+    group ? fetchAncestorMap(dept, promo) : Promise.resolve({}),
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
