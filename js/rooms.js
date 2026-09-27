@@ -167,7 +167,8 @@ const FALLBACK_DURATIONS = { 'QCM': 20, 'Conf 45': 45, 'Conf': 90, 'Conf 2h': 12
 /**
  * Charge les cours de la semaine courante pour tous les départements.
  * Chaque cours garde de quoi servir aux salles libres ET au suivi des profs :
- * { dept, room, day, start, end (minutes), tutor, module, type, groups }.
+ * { dept, room, day, start, end (minutes), tutor, tutors, module, type, groups }
+ * (tutors = enseignant principal + co-enseignants supp_tutor).
  * @returns {Promise<{courses: Array, failed: string[]}>}  failed = departements en echec
  */
 async function fetchAllCoursesForWeek() {
@@ -189,12 +190,16 @@ async function fetchAllCoursesForWeek() {
         const type     = course.type || '';
         const duration = durations[type] ?? FALLBACK_DURATIONS[type] ?? 85;
         if (day < 0) return;
+        // supp_tutor = co-enseignants, sous la forme [{ username: 'MPH' }]
+        const tutors = [c.tutor, ...(course.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username))]
+          .filter(Boolean);
         allCourses.push({
           dept, day,
           room:   c.room?.name || null,
           start:  startMin,             // minutes depuis minuit
           end:    startMin + duration,  // minutes depuis minuit
           tutor:  c.tutor || '',
+          tutors,
           module: module.abbrev || module.name || '?',
           type,
           groups: (course.groups || []).map(g => g.name).join(', '),

@@ -63,10 +63,10 @@ async function refreshTutors() {
   }
 }
 
-/** Liste des profs distincts ayant au moins un cours cette semaine. */
+/** Liste des profs distincts (co-enseignants inclus) ayant au moins un cours cette semaine. */
 function listTutors(courses) {
   const names = new Set();
-  courses.forEach(c => { if (c.tutor) names.add(c.tutor); });
+  courses.forEach(c => (c.tutors || [c.tutor]).forEach(t => { if (t) names.add(t); }));
   return [...names].sort((a, b) => a.localeCompare(b, 'fr'));
 }
 
@@ -120,7 +120,7 @@ function minToLabel(min) { return formatClock(min); }
  */
 function tutorWeek(name, courses, now = new Date()) {
   const slots = courses
-    .filter(c => c.tutor === name)
+    .filter(c => (c.tutors || [c.tutor]).includes(name))
     .sort((a, b) => a.day - b.day || a.start - b.start);
 
   const isThisWeek = state.currentWeek === getISOWeek(now) && state.currentYear === getISOWeekYear(now);

@@ -203,7 +203,10 @@ async function build(sel) {
       const grps    = course.groups || [];
       const grpNames = grps.map(g => g.name);
       const promo   = grps[0]?.train_prog || '';
-      const tutors  = [c.tutor, ...(course.supp_tutor || [])].filter(Boolean);
+      // supp_tutor = co-enseignants sous la forme [{ username: 'MPH' }] : les
+      // objets bruts donnaient "[object Object]" dans la description et ne
+      // correspondaient jamais au flux /ical/prof/
+      const tutors  = [c.tutor, ...(course.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username))].filter(Boolean);
 
       if (sel.tutor) {
         if (!tutors.includes(sel.tutor)) continue;
