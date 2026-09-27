@@ -322,8 +322,11 @@ function weekInWindow(year, week, now = new Date()) {
  * universitaire (mi-juillet), triees par distance a la semaine courante.
  */
 function weeksToMaintain(now = new Date()) {
-  const startYear = now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1; // annee univ. demarre en aout
-  const end   = new Date(Date.UTC(startYear + 1, 6, 20));                                      // ~20 juillet
+  let startYear = academicStartYear(now);
+  let end = new Date(Date.UTC(startYear + 1, 6, 20));   // ~20 juillet
+  // Du 21 au 31 juillet l'annee universitaire est finie mais la suivante n'a
+  // pas "demarre" (aout) : la fenetre ne contenait plus que des semaines passees.
+  if (now > end) { startYear++; end = new Date(Date.UTC(startYear + 1, 6, 20)); }
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 7 * CONFIG.weeksBehind));
 
   const seen = new Set(), out = [];
