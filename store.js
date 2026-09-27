@@ -159,14 +159,16 @@ function fetchUpstream(endpoint, params) {
         'Origin':     `https://${FLOPEDT_HOST}`,
       },
     }, res => {
-      let chunks = '';
-      res.on('data', d => chunks += d);
+      // Buffer.concat : concatener des morceaux decodes separement coupait un
+      // caractere multi-octets (un "é" a cheval sur deux morceaux devenait U+FFFD)
+      const chunks = [];
+      res.on('data', d => chunks.push(d));
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           return reject(new Error(`HTTP ${res.statusCode} sur ${endpoint}`));
         }
         let body;
-        try { body = JSON.parse(chunks); }
+        try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
         catch (e) { return reject(new Error(`JSON invalide sur ${endpoint}: ${e.message}`)); }
         if (body === null || typeof body !== 'object') return reject(new Error(`Reponse inattendue sur ${endpoint}`));
         resolve(body);
