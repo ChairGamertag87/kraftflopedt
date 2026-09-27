@@ -45,8 +45,12 @@ function openIcal() {
   document.body.style.overflow = 'hidden';
 }
 
-function openIcalTutor(tutor) {
-  const dept = getSelectedDept() || 'INFO';
+/**
+ * @param {string} tutor  initiales FlOpEDT
+ * @param {string} [dept] departement des cours du prof (defaut : celui de l'EDT affiche)
+ */
+function openIcalTutor(tutor, dept) {
+  dept = dept || getSelectedDept() || 'INFO';
   closeTutors();
   fillIcalPanel(icalPathForTutor(dept, tutor), `de ${tutor} (${dept})`);
   document.getElementById('ical-overlay').classList.add('open');

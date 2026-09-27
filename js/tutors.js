@@ -190,8 +190,14 @@ function renderTutorSchedule(name, courses) {
   }
 
   resultDiv.innerHTML = html;
+  // Departement du flux iCal : celui ou le prof a le plus de cours, pas le
+  // departement selectionne dans l'EDT (un prof GIM consulte depuis INFO
+  // donnait un calendrier vide).
+  const perDept = {};
+  slots.forEach(c => { perDept[c.dept] = (perDept[c.dept] || 0) + 1; });
+  const dept = Object.keys(perDept).sort((a, b) => perDept[b] - perDept[a])[0];
   resultDiv.querySelector('.tutors-ical').addEventListener('click', e => {
     e.preventDefault();
-    openIcalTutor(name);
+    openIcalTutor(name, dept);
   });
 }
