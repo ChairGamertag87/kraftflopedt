@@ -160,8 +160,11 @@ function renderTutorSchedule(name, courses) {
 
   const weekDates = getWeekDates(state.currentWeek, state.currentYear);
   const count = slots.length;
+  // Le nom du prof vient de FlOpEDT : jamais dans un attribut onclick inline
+  // (un nom contenant &quot;);alert(1);// s'executait), l'ecouteur est pose
+  // sur l'element une fois le HTML insere.
   html += `<div class="rooms-count">${count} cours cette semaine
-    · <a href="#" class="tutors-ical" onclick="openIcalTutor(${JSON.stringify(name).replace(/"/g, '&quot;')}); return false;">📅 S'abonner à son agenda</a></div>`;
+    · <a href="#" class="tutors-ical">📅 S'abonner à son agenda</a></div>`;
 
   for (let d = 0; d < 5; d++) {
     const daySlots = slots.filter(c => c.day === d);
@@ -187,4 +190,8 @@ function renderTutorSchedule(name, courses) {
   }
 
   resultDiv.innerHTML = html;
+  resultDiv.querySelector('.tutors-ical').addEventListener('click', e => {
+    e.preventDefault();
+    openIcalTutor(name);
+  });
 }
