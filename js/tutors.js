@@ -143,7 +143,7 @@ function renderTutorSchedule(name, courses) {
     return;
   }
 
-  let html = '';
+  let html = weekCoursesWarning();
 
   // Bandeau "en ce moment" (uniquement sur la semaine courante, un jour de cours)
   if (isThisWeek && todayDow >= 0 && todayDow <= 4) {

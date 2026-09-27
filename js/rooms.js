@@ -30,6 +30,7 @@ let _roomsWeek   = null;
 let _roomsYear   = null;
 let _coursesPromise = null; // chargement en cours, pour ne pas le lancer deux fois
 let _coursesPromiseKey = null; // "annee-semaine" de ce chargement
+let _coursesFailed  = [];   // departements en echec au dernier chargement (resultat partiel, non memorise)
 
 // État sélection
 let _roomsDay  = null;
@@ -138,18 +139,26 @@ function extractIndividualRooms(roomData) {
   return rooms;
 }
 
+/**
+ * Salles de tous les departements. Un departement en echec est signale dans
+ * `failed` : l'appelant ne memorise pas un resultat partiel (les salles du
+ * departement manquant apparaissaient libres jusqu'au rechargement de la page).
+ * @returns {Promise<{rooms: Set<string>, failed: string[]}>}
+ */
 async function fetchAllRooms() {
   const allRooms = new Set();
+  const failed = [];
   const promises = DEPTS.map(dept =>
     apiFetch('/fr/api/rooms/all/', `dept=${dept}`)
       .then(data => {
         const rooms = extractIndividualRooms(data);
         rooms.forEach(r => allRooms.add(r));
       })
-      .catch(e => console.warn(`[ROOMS] Erreur salles ${dept}:`, e.message))
+      .catch(e => { failed.push(dept); console.warn(`[ROOMS] Erreur salles ${dept}:`, e.message); })
   );
   await Promise.all(promises);
-  return allRooms;
+  if (failed.length === DEPTS.length) throw new Error('liste des salles indisponible');
+  return { rooms: allRooms, failed };
 }
 
 // Durées de secours si /fetch/constraints/ ne répond pas
@@ -159,9 +168,11 @@ const FALLBACK_DURATIONS = { 'QCM': 20, 'Conf 45': 45, 'Conf': 90, 'Conf 2h': 12
  * Charge les cours de la semaine courante pour tous les départements.
  * Chaque cours garde de quoi servir aux salles libres ET au suivi des profs :
  * { dept, room, day, start, end (minutes), tutor, module, type, groups }.
+ * @returns {Promise<{courses: Array, failed: string[]}>}  failed = departements en echec
  */
 async function fetchAllCoursesForWeek() {
   const allCourses = [];
+  const failed = [];
   const promises = DEPTS.map(async dept => {
     const params = `dept=${dept}&week=${state.currentWeek}&year=${state.currentYear}&work_copy=0`;
     try {
@@ -190,11 +201,19 @@ async function fetchAllCoursesForWeek() {
         });
       });
     } catch (e) {
+      failed.push(dept);
       console.warn(`[ROOMS] Erreur cours ${dept}:`, e.message);
     }
   });
   await Promise.all(promises);
-  return allCourses;
+  if (failed.length === DEPTS.length) throw new Error('cours de la semaine indisponibles');
+  return { courses: allCourses, failed };
+}
+
+/** Avertissement HTML si le dernier chargement de la semaine etait partiel, sinon ''. */
+function weekCoursesWarning() {
+  if (!_coursesFailed.length) return '';
+  return `<div class="rooms-hint">⚠️ Données incomplètes : ${escapeHtml(_coursesFailed.join(', '))} injoignable${_coursesFailed.length > 1 ? 's' : ''}, réessaie plus tard</div>`;
 }
 
 /**
@@ -210,10 +229,12 @@ async function ensureWeekCourses() {
     // si la semaine a change pendant le chargement, on en lance un autre.
     if (!_coursesPromise || _coursesPromiseKey !== key) {
       _coursesPromiseKey = key;
-      const p = fetchAllCoursesForWeek().then(courses => {
+      const p = fetchAllCoursesForWeek().then(({ courses, failed }) => {
         _allCourses = courses;
-        _roomsWeek  = week;
-        _roomsYear  = year;
+        _coursesFailed = failed;
+        // Resultat partiel : pas memorise comme "semaine chargee", il sera retente
+        if (failed.length === 0) { _roomsWeek = week; _roomsYear = year; }
+        else { _roomsWeek = null; _roomsYear = null; }
         if (_coursesPromise === p) { _coursesPromise = null; _coursesPromiseKey = null; }
         return courses;
       }, e => {
@@ -236,10 +257,20 @@ async function searchFreeRooms() {
 
   resultDiv.innerHTML = '<div class="rooms-hint"><span class="state-icon spin" style="font-size:1.2rem;">⟳</span> Chargement…</div>';
 
-  const [, courses] = await Promise.all([
-    _allRooms ? Promise.resolve(_allRooms) : fetchAllRooms().then(r => (_allRooms = r)),
-    ensureWeekCourses(),
-  ]);
+  let rooms, courses;
+  try {
+    const [roomsRes, coursesRes] = await Promise.all([
+      _allRooms ? { rooms: _allRooms, failed: [] } : fetchAllRooms(),
+      ensureWeekCourses(),
+    ]);
+    // La liste des salles n'est memorisee que si tous les departements ont repondu
+    if (roomsRes.failed.length === 0) _allRooms = roomsRes.rooms;
+    rooms   = roomsRes.rooms;
+    courses = coursesRes;
+  } catch (e) {
+    resultDiv.innerHTML = `<div class="rooms-hint">Erreur : ${escapeHtml(e.message)}</div>`;
+    return;
+  }
 
   // Salles occupées à ce créneau (comparaison en minutes entières)
   const occupied = new Set();
@@ -250,7 +281,7 @@ async function searchFreeRooms() {
   });
 
   // Salles libres, groupées par bâtiment
-  const free = [..._allRooms].filter(r => !occupied.has(r));
+  const free = [...rooms].filter(r => !occupied.has(r));
   const groups = {};
   free.forEach(r => {
     const bldg = getRoomBuilding(r);
@@ -268,11 +299,12 @@ async function searchFreeRooms() {
   const sortedBldgs = bldgOrder.filter(b => groups[b]);
 
   if (free.length === 0) {
-    resultDiv.innerHTML = '<div class="rooms-hint">Aucune salle libre à ce créneau</div>';
+    resultDiv.innerHTML = weekCoursesWarning() + '<div class="rooms-hint">Aucune salle libre à ce créneau</div>';
     return;
   }
 
-  let html = `<div class="rooms-count">${free.length} salle${free.length > 1 ? 's' : ''} libre${free.length > 1 ? 's' : ''}</div>`;
+  let html = weekCoursesWarning();
+  html += `<div class="rooms-count">${free.length} salle${free.length > 1 ? 's' : ''} libre${free.length > 1 ? 's' : ''}</div>`;
 
   sortedBldgs.forEach(bldg => {
     html += `
