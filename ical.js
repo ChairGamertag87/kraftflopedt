@@ -175,7 +175,7 @@ async function build(sel) {
     `PRODID:-//KraftFlopEDT//${HOST}//FR`,
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:EDT ${name}`,
+    `X-WR-CALNAME:EDT ${esc(name)}`,
     `X-WR-TIMEZONE:${TZID}`,
     'X-WR-CALDESC:Emploi du temps IUT de Blagnac (source FlOpEDT) via KraftFlopEDT',
     'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
@@ -266,7 +266,9 @@ function parsePath(pathname) {
   let segs;
   try { segs = pathname.slice(6, -4).split('/').map(decodeURIComponent); }
   catch (_) { return null; }
-  if (segs.some(s => !s || s.length > 64)) return null;
+  // Un segment part dans les en-tetes iCal (X-WR-CALNAME) : les caracteres de
+  // controle (dont \r\n) permettraient d'injecter des lignes dans le flux.
+  if (segs.some(s => !s || s.length > 64 || /[\u0000-\u001f\u007f]/.test(s))) return null;
 
   const depts = store.CONFIG.depts;
   const findDept = s => depts.find(d => d.toLowerCase() === s.toLowerCase());
