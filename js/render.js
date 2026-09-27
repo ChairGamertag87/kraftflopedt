@@ -53,19 +53,34 @@ function showError(msg) {
  * Répartit les cours d'une journée qui se chevauchent en colonnes.
  * Deux cours au même créneau existent (CM de promo + TD de groupe pendant une
  * retouche d'EDT) : superposés, l'un des deux était invisible.
+ * Le nombre de colonnes est calculé par groupe de cours qui se chevauchent
+ * (un seul chevauchement le matin ne met plus tous les cours du jour en demi-largeur).
  * @returns {Array<{c:object, col:number, columns:number}>}
  */
 function layoutLanes(dayCourses) {
+  const EPS    = 1e-9;
   const sorted = dayCourses.slice().sort((a, b) => a.start - b.start || a.end - b.end);
-  const lanes  = [];   // fin du dernier cours de chaque colonne
-  const placed = sorted.map(c => {
-    let col = lanes.findIndex(end => end <= c.start + 1e-9);
+  const out    = [];
+  let cluster  = [];   // { c, col } du groupe en cours
+  let lanes    = [];   // fin du dernier cours de chaque colonne du groupe
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    const columns = Math.max(1, lanes.length);
+    cluster.forEach(p => out.push({ ...p, columns }));
+    cluster = []; lanes = []; clusterEnd = -Infinity;
+  };
+
+  for (const c of sorted) {
+    if (cluster.length && c.start >= clusterEnd - EPS) flush(); // aucun chevauchement avec le groupe
+    let col = lanes.findIndex(end => end <= c.start + EPS);
     if (col === -1) { lanes.push(c.end); col = lanes.length - 1; }
     else lanes[col] = c.end;
-    return { c, col };
-  });
-  const columns = Math.max(1, lanes.length);
-  return placed.map(p => ({ ...p, columns }));
+    cluster.push({ c, col });
+    clusterEnd = Math.max(clusterEnd, c.end);
+  }
+  flush();
+  return out;
 }
 
 /**
