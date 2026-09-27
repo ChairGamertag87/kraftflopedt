@@ -29,6 +29,7 @@ let _allCourses  = null;  // cours de la semaine, tous depts (partagé avec tuto
 let _roomsWeek   = null;
 let _roomsYear   = null;
 let _coursesPromise = null; // chargement en cours, pour ne pas le lancer deux fois
+let _coursesPromiseKey = null; // "annee-semaine" de ce chargement
 
 // État sélection
 let _roomsDay  = null;
@@ -203,15 +204,23 @@ async function fetchAllCoursesForWeek() {
 async function ensureWeekCourses() {
   const stale = !_allCourses || _roomsWeek !== state.currentWeek || _roomsYear !== state.currentYear;
   if (stale) {
-    if (!_coursesPromise) {
-      const week = state.currentWeek, year = state.currentYear;
-      _coursesPromise = fetchAllCoursesForWeek().then(courses => {
+    const week = state.currentWeek, year = state.currentYear;
+    const key  = `${year}-${week}`;
+    // Une promesse en cours n'est reutilisee que si elle charge la meme semaine :
+    // si la semaine a change pendant le chargement, on en lance un autre.
+    if (!_coursesPromise || _coursesPromiseKey !== key) {
+      _coursesPromiseKey = key;
+      const p = fetchAllCoursesForWeek().then(courses => {
         _allCourses = courses;
         _roomsWeek  = week;
         _roomsYear  = year;
-        _coursesPromise = null;
+        if (_coursesPromise === p) { _coursesPromise = null; _coursesPromiseKey = null; }
         return courses;
-      }, e => { _coursesPromise = null; throw e; });
+      }, e => {
+        if (_coursesPromise === p) { _coursesPromise = null; _coursesPromiseKey = null; }
+        throw e;
+      });
+      _coursesPromise = p;
     }
     return _coursesPromise;
   }
