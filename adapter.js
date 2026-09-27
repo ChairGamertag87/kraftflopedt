@@ -517,11 +517,11 @@ const ROUTES = {
 
 const RAW_PREFIX = '/api/flopedt';
 
-function send(res, status, payload) {
+function send(res, status, payload, cacheControl) {
   res.writeHead(status, {
     'Content-Type':                'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Cache-Control':               status === 200 ? 'public, max-age=300' : 'no-store',
+    'Cache-Control':               cacheControl || (status === 200 ? 'public, max-age=300' : 'no-store'),
   });
   res.end(JSON.stringify(payload, null, 2));
 }
@@ -550,7 +550,8 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, OPENAPI_SPEC);
   }
   if (parsed.pathname === '/status') {
-    return send(res, 200, { ...store.status(), crous: crous.status() });
+    // Etat instantane : jamais mis en cache (nginx renvoie la meme consigne)
+    return send(res, 200, { ...store.status(), crous: crous.status() }, 'no-store');
   }
 
   // Endpoints bruts FlOpEDT pour le front (js/api.js) : /api/flopedt/fr/api/...
