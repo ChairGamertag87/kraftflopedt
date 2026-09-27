@@ -21,7 +21,15 @@
  *   MIN_GAP_MS          espacement entre deux appels   (defaut 3000)
  *   UPSTREAM_TIMEOUT_MS delai max d'un appel FlOpEDT   (defaut 60000)
  *   WEEKS_BEHIND        semaines passees entretenues   (defaut 2)
+ *   FAILURE_TTL_MS      delai avant de retenter une cle en echec (defaut 300000 = 5 min)
+ *   MAX_ON_DEMAND       demandes visiteur en attente max      (defaut 16)
  *   DISABLE_REFRESH=1   desactive le rafraichissement  (tests)
+ *
+ * Garde-fous (un visiteur ne doit pas pouvoir faire bannir l'IP du serveur) :
+ * seuls les departements de DEPTS sont acceptes, une semaine absente du store
+ * n'est telechargee que si elle tombe dans l'annee universitaire en cours, une
+ * cle en echec n'est pas retentee avant FAILURE_TTL_MS et la file des demandes
+ * visiteur est bornee.
  */
 
 const fs    = require('fs');
@@ -38,6 +46,8 @@ const CONFIG = {
   minGap:          Number(process.env.MIN_GAP_MS)          || 3000,
   upstreamTimeout: Number(process.env.UPSTREAM_TIMEOUT_MS) || 60000,
   weeksBehind:     Number(process.env.WEEKS_BEHIND ?? 2),
+  failureTtl:      Number(process.env.FAILURE_TTL_MS) || 5 * 60 * 1000,
+  maxOnDemand:     Number(process.env.MAX_ON_DEMAND)  || 16,
   disableRefresh:  process.env.DISABLE_REFRESH === '1',
 };
 
@@ -70,8 +80,10 @@ function validate(endpoint, query = {}) {
   const def = ENDPOINTS[endpoint];
   if (!def) throw httpError(404, `Endpoint FlOpEDT non autorise : ${endpoint}`);
 
-  const dept = String(query.dept || '').trim();
-  if (!/^[A-Za-z0-9_-]{1,16}$/.test(dept)) throw httpError(400, 'Parametre dept invalide');
+  // Liste blanche : n'importe quelle chaine partait sinon vers FlOpEDT
+  const raw  = String(query.dept || '').trim();
+  const dept = CONFIG.depts.find(d => d.toLowerCase() === raw.toLowerCase());
+  if (!dept) throw httpError(400, `Parametre dept invalide (attendu : ${CONFIG.depts.join(', ')})`);
   const params = { dept };
 
   if (def.kind === 'courses') {
@@ -127,7 +139,11 @@ function persist(entry) {
 //  Appel FlOpEDT (une seule requete a la fois, espacees)
 // ════════════════════════════════════════════════════
 
-const upstream = { lastOk: null, lastError: null, lastErrorAt: null, calls: 0, failures: 0 };
+const upstream = { lastOk: null, lastError: null, lastErrorAt: null, calls: 0, failures: 0, rejectedOnDemand: 0 };
+
+// Cles dont le dernier appel a echoue : pas de nouvel essai avant FAILURE_TTL_MS
+// (une combinaison inconnue redemandee en boucle ne genere plus un appel a chaque fois)
+const failedAt = new Map(); // key -> timestamp ms
 
 function fetchUpstream(endpoint, params) {
   return new Promise((resolve, reject) => {
@@ -187,9 +203,11 @@ async function drain() {
         mem.set(job.key, entry);
         try { persist(entry); } catch (e) { warn(`ecriture impossible ${job.key}: ${e.message}`); }
         upstream.lastOk = entry.fetchedAt;
+        failedAt.delete(job.key);
         job.resolve(entry);
       } catch (e) {
         upstream.failures++;
+        failedAt.set(job.key, Date.now());
         upstream.lastError   = e.message;
         upstream.lastErrorAt = new Date().toISOString();
         job.reject(e);
@@ -245,6 +263,20 @@ async function get(endpoint, query) {
     return { body: entry.body, fetchedAt: entry.fetchedAt, status };
   }
 
+  // Donnee absente : telechargement a la demande, sous conditions
+  if (ENDPOINTS[endpoint].kind === 'courses' && !weekInWindow(params.year, params.week)) {
+    throw httpError(404, `Semaine ${params.year}-S${params.week} hors de l'annee universitaire en cours`);
+  }
+  const lastFail = failedAt.get(key);
+  if (lastFail && Date.now() - lastFail < CONFIG.failureTtl) {
+    const retryIn = Math.ceil((CONFIG.failureTtl - (Date.now() - lastFail)) / 1000);
+    throw httpError(503, `FlOpEDT a echoue recemment sur cette donnee (${upstream.lastError || 'erreur'}), nouvel essai possible dans ${retryIn} s`);
+  }
+  if (!pending.has(key) && queue.filter(j => j.priority >= 10).length >= CONFIG.maxOnDemand) {
+    upstream.rejectedOnDemand++;
+    throw httpError(503, 'Trop de demandes en attente vers FlOpEDT, reessaie dans quelques secondes');
+  }
+
   const fresh = await refresh(endpoint, params, 10);
   return { body: fresh.body, fetchedAt: fresh.fetchedAt, status: 'miss' };
 }
@@ -258,6 +290,31 @@ function isoWeek(d) {
   date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   return { week: Math.ceil((((date - yearStart) / 86400000) + 1) / 7), year: date.getUTCFullYear() };
+}
+
+/** Lundi (minuit UTC) de la semaine ISO demandee. */
+function isoWeekMonday(year, week) {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dow  = jan4.getUTCDay() || 7;
+  const mon  = new Date(jan4);
+  mon.setUTCDate(jan4.getUTCDate() - (dow - 1) + (week - 1) * 7);
+  return mon;
+}
+
+/** Annee de debut de l'annee universitaire en cours (demarre en aout). */
+function academicStartYear(now = new Date()) {
+  return now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+}
+
+/**
+ * Une semaine absente du store n'est telechargee que si elle tombe entre le
+ * 1er juillet precedant l'annee universitaire en cours et le 31 aout qui la
+ * suit : au plus ~61 semaines par departement, jamais 2000-2100.
+ */
+function weekInWindow(year, week, now = new Date()) {
+  const start = academicStartYear(now);
+  const t = isoWeekMonday(year, week).getTime();
+  return t >= Date.UTC(start, 6, 1) && t <= Date.UTC(start + 1, 7, 31);
 }
 
 /**
@@ -371,10 +428,10 @@ function status() {
   return {
     config: { depts: CONFIG.depts, refreshCoursesMs: CONFIG.refreshCourses, refreshStaticMs: CONFIG.refreshStatic, minGapMs: CONFIG.minGap, weeksBehind: CONFIG.weeksBehind },
     store:  { entries: mem.size, courses, static: statics, oldestFetchedAt: oldest, newestFetchedAt: newest, dataDir: CONFIG.dataDir },
-    queue:  { pending: queue.length, inFlight: draining ? 1 : 0 },
+    queue:  { pending: queue.length, inFlight: draining ? 1 : 0, failedKeys: failedAt.size },
     upstream,
     runs,
   };
 }
 
-module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, start, status, weeksToMaintain };
+module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, start, status, weeksToMaintain, weekInWindow };
