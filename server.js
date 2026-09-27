@@ -6,6 +6,11 @@
  *  2. Proxifie /api/flopedt/* vers flopedt.iut-blagnac.fr
  *     (GET uniquement, 4 endpoints autorisés) pour contourner
  *     le blocage CORS du navigateur
+ *  3. Relaie /ical/* vers l'adapter de prod (ICAL_UPSTREAM, defaut
+ *     https://kraftflopedt.fr) : les flux sont generes depuis le store de
+ *     l'adapter, qu'on ne fait pas tourner en dev (200 appels FlOpEDT)
+ *
+ * Serveur de DEV uniquement : ne pas exposer sur Internet.
  *
  * Usage :
  *   node server.js
@@ -20,6 +25,7 @@ const url   = require('url');
 
 const PORT        = 3000;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
+const ICAL_UPSTREAM = new URL(process.env.ICAL_UPSTREAM || 'https://kraftflopedt.fr');
 
 // Menus CROUS (meme module qu'en prod dans l'adapter) : cache dans ./.data en dev
 process.env.DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '.data');
@@ -122,6 +128,32 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── Flux iCalendar : relayes vers l'adapter de prod (bouton Agenda en local) ──
+  if (parsed.pathname.startsWith('/ical/')) {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET' });
+      return res.end(JSON.stringify({ error: 'Méthode non autorisée' }));
+    }
+    const client = ICAL_UPSTREAM.protocol === 'http:' ? http : https;
+    const up = client.request({
+      hostname: ICAL_UPSTREAM.hostname, port: ICAL_UPSTREAM.port || undefined,
+      path: parsed.pathname + (parsed.search || ''), method: 'GET',
+      headers: { 'Accept': 'text/calendar', 'User-Agent': 'KraftFlopEDT-Proxy/1.0 (dev)' },
+    }, upRes => {
+      res.writeHead(upRes.statusCode, {
+        'Content-Type':  upRes.headers['content-type'] || 'text/calendar; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      upRes.pipe(res);
+    });
+    up.setTimeout(30000, () => up.destroy(new Error('timeout ical (30 s)')));
+    up.on('error', err => {
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `iCal indisponible via ${ICAL_UPSTREAM.host} : ${err.message}` }));
+    });
+    return up.end();
+  }
+
   // ── Preflight CORS (OPTIONS) ──
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
@@ -134,13 +166,22 @@ const server = http.createServer((req, res) => {
   }
 
   // ── Fichiers statiques ──
-  let filePath = parsed.pathname === '/'
+  let pathname;
+  try { pathname = decodeURIComponent(parsed.pathname); }
+  catch (_) { res.writeHead(400); return res.end('Bad request'); }
+  const filePath = pathname === '/'
     ? path.join(STATIC_DIR, 'index.html')
-    : path.join(STATIC_DIR, parsed.pathname);
+    : path.join(STATIC_DIR, pathname);
 
-  // Sécurité : empêche de sortir du dossier
-  if (!filePath.startsWith(STATIC_DIR)) {
+  // Sécurité : rester DANS le dossier (un simple startsWith laissait lire un
+  // dossier voisin "kraftflopedt-xxx") et ne jamais servir les fichiers caches
+  // (.git/, .data/, .gitignore...)
+  const rel = path.relative(STATIC_DIR, filePath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
     res.writeHead(403); res.end('Forbidden'); return;
+  }
+  if (rel.split(path.sep).some(seg => seg.startsWith('.'))) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end(`Fichier non trouvé : ${pathname}`); return;
   }
 
   const ext     = path.extname(filePath);
@@ -149,7 +190,7 @@ const server = http.createServer((req, res) => {
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end(`Fichier non trouvé : ${parsed.pathname}`);
+      res.end(`Fichier non trouvé : ${pathname}`);
       return;
     }
     res.writeHead(200, { 'Content-Type': mime });
