@@ -47,23 +47,26 @@ function buildAncestorMap(nodes, ancestors, map) {
 
 /**
  * Charge l'arbre des groupes et construit la map ancêtres.
+ * Une erreur est propagée : sans l'arbre, le filtre ne garderait que le groupe
+ * exact (CM de promo et TD du groupe parent disparaissaient sans message, et ce
+ * résultat incomplet était ensuite mis en cache comme s'il était bon).
  * @param {string} dept
  * @returns {Promise<Object>}  — { "1A": ["1","CE"], "CE": [], ... }
  */
 async function fetchAncestorMap(dept) {
+  let tree;
   try {
-    const tree = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
-    const map  = {};
-    // L'arbre est un tableau de racines (une par promo : BUT1, BUT2, BUT3)
-    for (const root of tree) {
-      map[root.name] = [];
-      if (root.children) buildAncestorMap(root.children, [root.name], map);
-    }
-    return map;
+    tree = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
   } catch (e) {
-    console.warn('[EDT] Impossible de charger l\'arbre des groupes :', e.message);
-    return {};
+    throw new Error(`arbre des groupes indisponible : ${e.message}`);
   }
+  const map = {};
+  // L'arbre est un tableau de racines (une par promo : BUT1, BUT2, BUT3)
+  for (const root of tree) {
+    map[root.name] = [];
+    if (root.children) buildAncestorMap(root.children, [root.name], map);
+  }
+  return map;
 }
 
 /**
@@ -94,20 +97,21 @@ function isGroupVisible(courseGroup, selectedGroup, ancestorMap) {
 
 /**
  * Charge les durées par type de cours depuis /fr/api/fetch/constraints/.
- * Retourne une map type → durée en minutes.
+ * Retourne une map type → durée en minutes. Une erreur est propagée : des
+ * durées par défaut de 85 min donnaient de fausses heures de fin, mises en cache.
  */
 async function fetchDurations(dept) {
+  let data;
   try {
-    const data = await apiFetch('/fr/api/fetch/constraints/', `dept=${encodeURIComponent(dept)}`);
-    const map  = {};
-    for (const [type, val] of Object.entries(data)) {
-      map[type] = val.duration;
-    }
-    return map;
+    data = await apiFetch('/fr/api/fetch/constraints/', `dept=${encodeURIComponent(dept)}`);
   } catch (e) {
-    console.warn('[EDT] Durées indisponibles, 85 min par défaut :', e.message);
-    return {};
+    throw new Error(`durées des créneaux indisponibles : ${e.message}`);
   }
+  const map = {};
+  for (const [type, val] of Object.entries(data)) {
+    if (val && val.duration) map[type] = val.duration;
+  }
+  return map;
 }
 
 function getDuration(courseType, durations) {
