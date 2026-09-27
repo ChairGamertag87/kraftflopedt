@@ -212,6 +212,9 @@ async function loadGroupsFromAPI() {
     if (!_treeCache[dept]) {
       _treeCache[dept] = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
     }
+    // Clic INFO puis vite RT : si l'arbre INFO arrive en dernier, il ne doit
+    // pas remplacer les promos RT (le departement actif a change entre-temps)
+    if (getSelectedDept() !== dept) return;
     state.groupTree = _treeCache[dept];
 
     // Génère les chips de promo depuis l'arbre
@@ -219,6 +222,7 @@ async function loadGroupsFromAPI() {
     filterGroupsByPromo();
   } catch (e) {
     console.warn('[EDT] Impossible de charger les groupes :', e.message);
+    if (getSelectedDept() !== dept) return;
     state.groupTree = [];
     refreshGroupsFallback();
   }
