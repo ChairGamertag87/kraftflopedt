@@ -2,25 +2,31 @@
 
 Site en ligne : **[kraftflopedt.fr](https://kraftflopedt.fr)**
 
-Site web d'emploi du temps basé sur FlOpEDT, avec proxy Node.js pour contourner le CORS.
+Site web d'emploi du temps basé sur FlOpEDT. En prod, un adapter Node.js garde
+les donnees FlOpEDT en local et les sert au site ; en dev, `server.js` relaie
+directement vers FlOpEDT.
 
 ## Prérequis
 
-- [Node.js](https://nodejs.org/) installé (version 14+)
+- [Node.js](https://nodejs.org/) installé (version 18+, `node:22-alpine` en prod)
 - Aucune dépendance npm — le serveur utilise uniquement les modules natifs Node.js
 
-## Lancement
+## Lancement (dev)
 
 ```bash
 # 1. Se placer dans le dossier du projet
-cd edt-blagnac
+cd kraftflopedt
 
-# 2. Lancer le serveur
+# 2. Lancer le serveur de dev (statique + proxy FlOpEDT + menus CROUS)
 node server.js
 
 # 3. Ouvrir dans le navigateur
 # http://localhost:3000
 ```
+
+Le bouton "Agenda" fonctionne aussi en local : `server.js` relaie `/ical/*` vers
+l'adapter de prod (`ICAL_UPSTREAM`, defaut `https://kraftflopedt.fr`).
+Le deploiement en prod (Docker, Caddy, cron) est decrit dans [`deploy/`](deploy/README.md).
 
 Le terminal doit afficher :
 ```
@@ -100,8 +106,15 @@ Le menu est indicatif : il peut differer de ce qui est reellement servi, la
 modale le rappelle. Un easter egg dedie a CroustOccitanie se cache dans la
 modale (taper "croust" au clavier, ou tapoter 5 fois le titre).
 
-Reglages par variables d'environnement de l'adapter : `CROUS_REGION`,
-`CROUS_RESTO_ID`, `CROUS_RESTO_NAME`, `CROUS_FALLBACK_ID`, `CROUS_TTL_MS`.
+Un visiteur n'attend jamais le CNOUS plus de 3 s (`CROUS_WAIT_MS`) : passe ce
+delai le cache perime est servi (`stale: true`) pendant que le flux se recharge
+en fond, et apres un echec aucun nouvel essai n'est fait avant 5 min
+(`CROUS_RETRY_MS`). Le resultat du repli est lui aussi garde en memoire.
+
+Reglages par variables d'environnement de l'adapter (voir l'en-tete de
+`crous.js`) : `CROUS_REGION` (defaut `toulouse`), `CROUS_RESTO` (id dans le flux,
+defaut `r674`), `CROUS_FALLBACK_CODE` (restaurant CROUStillant, defaut `116`),
+`CROUS_TTL_MS`, `CROUS_WAIT_MS`, `CROUS_RETRY_MS`.
 
 ## Pourquoi un proxy ?
 
@@ -113,15 +126,32 @@ Le proxy est volontairement restreint : GET uniquement, quatre endpoints publics
 (`fetch/scheduledcourses`, `fetch/constraints`, `groups/structural/tree`, `rooms/all`),
 et les cookies du visiteur ne sont jamais transmis à FlOpEDT.
 
-- en dev : `server.js` (port 3000)
-- en prod : le nginx du conteneur web (`docker/nginx.conf`), derrière Caddy
+- en dev : `server.js` (port 3000) relaie vers FlOpEDT
+- en prod : le nginx du conteneur web (`docker/nginx.conf`), derrière Caddy,
+  relaie vers l'adapter (`adapter.js`), qui repond depuis son store local
+
+L'adapter n'accepte que les departements de `DEPTS` et ne telecharge a la
+demande que les semaines de l'annee universitaire en cours ; une cle en echec
+n'est pas retentee avant 5 min (`FAILURE_TTL_MS`) et la file des demandes
+visiteur est bornee (`MAX_ON_DEMAND`), pour qu'un visiteur ne puisse pas faire
+bannir l'IP du serveur par FlOpEDT.
 
 ## Architecture
 
 ```
-edt-blagnac/
-├── server.js        ← proxy Node.js + serveur de fichiers statiques
-├── index.html       ← structure HTML
+kraftflopedt/
+├── server.js            ← serveur de DEV : statique + proxy FlOpEDT + CROUS + relais iCal
+├── adapter.js           ← PROD : API de l'adapter (endpoints bruts /api/flopedt/*, /status, /ical/, /crous/menu)
+├── store.js             ← store local FlOpEDT (disque + memoire, rafraichissement en fond)
+├── ical.js              ← flux iCalendar generes depuis le store
+├── crous.js             ← menus du Resto U' (flux CNOUS + repli CROUStillant)
+├── docker/nginx.conf    ← nginx du conteneur web (statique + relais vers l'adapter)
+├── Dockerfile.web       ← image nginx (assets versionnes ?v=<hash>)
+├── Dockerfile.adapter   ← image node de l'adapter
+├── docker-compose.yml   ← les deux services + volume de donnees
+├── auto-update.sh       ← deploiement automatique par cron (voir deploy/README.md)
+├── deploy/README.md     ← mise en prod (Docker, Caddy, cron)
+├── index.html           ← structure HTML
 ├── css/
 │   ├── base.css     ← variables, reset, composants carte (style "carton")
 │   ├── header.css   ← en-tête
@@ -137,5 +167,7 @@ edt-blagnac/
     ├── render.js    ← construction de la grille HTML
     ├── rooms.js     ← salles libres + cache des cours de la semaine
     ├── tutors.js    ← "Où est le prof ?"
+    ├── ical.js      ← modale d'abonnement agenda
+    ├── crous.js     ← modale du menu du CROUS
     └── main.js      ← initialisation
 ```
