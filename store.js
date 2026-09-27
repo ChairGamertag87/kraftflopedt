@@ -56,20 +56,30 @@ function warn(...a) { console.warn(`[${new Date().toISOString()}] [store]`, ...a
 //  Validation des parametres (evite de polluer le store)
 // ════════════════════════════════════════════════════
 
+/**
+ * Erreur portant un code HTTP : l'adapter s'en sert pour repondre 400 (parametre
+ * refuse) plutot que 503 (FlOpEDT en panne), sans deviner d'apres le message.
+ */
+function httpError(status, message) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
+}
+
 function validate(endpoint, query = {}) {
   const def = ENDPOINTS[endpoint];
-  if (!def) throw new Error(`Endpoint FlOpEDT non autorise : ${endpoint}`);
+  if (!def) throw httpError(404, `Endpoint FlOpEDT non autorise : ${endpoint}`);
 
   const dept = String(query.dept || '').trim();
-  if (!/^[A-Za-z0-9_-]{1,16}$/.test(dept)) throw new Error('Parametre dept invalide');
+  if (!/^[A-Za-z0-9_-]{1,16}$/.test(dept)) throw httpError(400, 'Parametre dept invalide');
   const params = { dept };
 
   if (def.kind === 'courses') {
     const week = Number(query.week), year = Number(query.year);
-    if (!Number.isInteger(week) || week < 1 || week > 53)     throw new Error('Parametre week invalide (1-53)');
-    if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new Error('Parametre year invalide');
+    if (!Number.isInteger(week) || week < 1 || week > 53)     throw httpError(400, 'Parametre week invalide (1-53)');
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) throw httpError(400, 'Parametre year invalide');
     const wc = query.work_copy === undefined || query.work_copy === '' ? 0 : Number(query.work_copy);
-    if (wc !== 0) throw new Error('Seul work_copy=0 est disponible');
+    if (wc !== 0) throw httpError(400, 'Seul work_copy=0 est disponible');
     Object.assign(params, { week, year, work_copy: 0 });
   }
   return params;
@@ -367,4 +377,4 @@ function status() {
   };
 }
 
-module.exports = { ENDPOINTS, CONFIG, validate, get, entries, refresh, start, status, weeksToMaintain };
+module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, start, status, weeksToMaintain };

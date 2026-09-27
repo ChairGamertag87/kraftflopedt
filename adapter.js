@@ -149,7 +149,7 @@ function normalizeCourse(c, durations) {
 
 async function getCourses({ week, year, dept, promo, group }) {
   if (!week || !year || !dept) {
-    throw new Error('Required parameters: week, year, dept');
+    throw store.httpError(400, 'Required parameters: week, year, dept');
   }
 
   const [raw, durations, ancestorMap] = await Promise.all([
@@ -172,7 +172,7 @@ async function getCourses({ week, year, dept, promo, group }) {
 }
 
 async function getGroupTree({ dept }) {
-  if (!dept) throw new Error('Required parameter: dept');
+  if (!dept) throw store.httpError(400, 'Required parameter: dept');
   const tree = await flopFetch('/fr/api/groups/structural/tree/', { dept });
 
   const flatten = (nodes, parent = null) => {
@@ -189,7 +189,7 @@ async function getGroupTree({ dept }) {
 
 async function getFreeRooms({ week, year, dept, day, start, end }) {
   if (!week || !year || !dept || !day || !start || !end) {
-    throw new Error('Required parameters: week, year, dept, day, start, end');
+    throw store.httpError(400, 'Required parameters: week, year, dept, day, start, end');
   }
 
   const [raw, durations] = await Promise.all([
@@ -569,8 +569,10 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify(body));
     } catch (e) {
       console.error('[ERR]', e.message);
-      const isParam = /invalide|disponible|non autorise/.test(e.message);
-      return send(res, isParam ? 400 : 503, { error: isParam ? e.message : `FlOpEDT indisponible et aucune donnee locale : ${e.message}` });
+      // Seules les erreurs typees par le store (parametre refuse) sont des 4xx :
+      // un "JSON invalide sur ..." renvoye par FlOpEDT est bien une panne amont.
+      const status = e.status || 503;
+      return send(res, status, { error: status < 500 ? e.message : `FlOpEDT indisponible et aucune donnee locale : ${e.message}` });
     }
   }
 
@@ -605,8 +607,7 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, { data });
   } catch (e) {
     console.error('[ERR]', e.message);
-    const isParam = /^Required parameter|invalide|disponible/.test(e.message);
-    send(res, isParam ? 400 : 503, { error: e.message });
+    send(res, e.status || 503, { error: e.message });
   }
 });
 
