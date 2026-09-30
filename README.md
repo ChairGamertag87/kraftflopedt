@@ -39,6 +39,27 @@ Le terminal doit afficher :
   Ctrl+C pour arrêter
 ```
 
+## Tests et integration continue
+
+Les fonctions pures (semaines ISO, colonnes de la grille, table des ancetres par
+promo, fenetre de semaines du store, chemins iCal, parseur du flux CROUS) sont
+couvertes par `node --test`, sans dependance npm. Les scripts du navigateur
+(`js/*.js`) sont charges dans un contexte isole par `test/helpers/front.js`.
+
+```bash
+npm test                       # ou : node --test test/*.test.js
+# sans Node sur la machine :
+docker run --rm -v "$PWD":/app:ro -w /app node:22-alpine node --test test/*.test.js
+```
+
+Le workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) lance les
+tests puis construit les deux images Docker a chaque push ou pull request sur
+`main`, et verifie que l'adapter repond sur `/status` (avec `DISABLE_REFRESH=1`,
+donc sans appel a FlOpEDT) et que nginx sert `index.html` avec des assets
+versionnes et les en-tetes de securite. Le deploiement reste fait par le cron
+`auto-update.sh` (voir [`deploy/`](deploy/README.md)) : un badge rouge sur GitHub
+signale un commit a corriger ou a annuler.
+
 ## Store local FlOpEDT (adapter)
 
 FlOpEDT est lent en periode de charge (10 a 20 s par appel) et bloque les IP trop
@@ -151,6 +172,9 @@ kraftflopedt/
 ├── docker-compose.yml   ← les deux services + volume de donnees
 ├── auto-update.sh       ← deploiement automatique par cron (voir deploy/README.md)
 ├── deploy/README.md     ← mise en prod (Docker, Caddy, cron)
+├── test/                ← tests unitaires node --test (helpers/front.js charge js/*.js)
+├── .github/workflows/   ← CI : tests puis images Docker
+├── package.json         ← scripts npm (start, test), aucune dependance
 ├── index.html           ← structure HTML
 ├── css/
 │   ├── base.css     ← variables, reset, composants carte (style "carton")
