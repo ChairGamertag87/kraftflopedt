@@ -1,0 +1,11 @@
+{
+  "name": "kraftflopedt",
+  "private": true,
+  "description": "Emploi du temps de l'IUT de Blagnac (FlOpEDT), site statique + adapter Node sans dependance npm",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  }
+}
