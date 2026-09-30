@@ -174,7 +174,15 @@ async function ensureFresh() {
 //  Parsing du XML (wrapper regulier) puis du HTML des menus
 // ════════════════════════════════════════════════════
 
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', ocirc: 'ô', ecirc: 'ê', icirc: 'î', ucirc: 'û', euml: 'ë', iuml: 'ï', oelig: 'œ', OElig: 'Œ', Eacute: 'É' };
+// Entites nommees du francais courant ; les autres et les numeriques passent par decodeEntities
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  eacute: 'é', egrave: 'è', agrave: 'à', ugrave: 'ù', ccedil: 'ç',
+  acirc: 'â', ecirc: 'ê', icirc: 'î', ocirc: 'ô', ucirc: 'û', euml: 'ë', iuml: 'ï', uuml: 'ü',
+  oelig: 'œ', OElig: 'Œ', Eacute: 'É', Egrave: 'È', Agrave: 'À', Ccedil: 'Ç',
+  rsquo: '\u2019', lsquo: '\u2018', ldquo: '\u201c', rdquo: '\u201d', hellip: '\u2026',
+  ndash: '\u2013', mdash: '\u2014', laquo: '\u00ab', raquo: '\u00bb', deg: '\u00b0', euro: '\u20ac',
+};
 
 function decodeEntities(s) {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
