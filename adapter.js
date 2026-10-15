@@ -61,14 +61,18 @@ function minutesToHHMM(m) {
   return `${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
 }
 
-function detectType(type, name = '') {
-  const t = (type || '').toLowerCase();
+function detectType(type, name = '', abbrev = '') {
+  // Meme regle que js/utils.js (nomenclature par departement : TD240, CM90,
+  // ExamTP240, CTRL90, X90...). Garder les deux copies synchronisees.
+  const t = (type || '').toLowerCase().trim();
   const n = (name || '').toLowerCase();
-  if (t === 'cm') return 'cm';
-  if (t === 'td') return 'td';
-  if (t === 'tp') return 'tp';
-  if (t === 'projet') return 'project';
-  if (t === 'ds' || t === 'qcm' || t.includes('exam') || n.includes('exam')) return 'exam';
+  const a = (abbrev || '').toLowerCase();
+  if (t.startsWith('projet')) return 'project';
+  if (t === 'ds' || t === 'qcm' || t.includes('exam') || t.startsWith('ctrl')) return 'exam';
+  const m = t.match(/^(cm|td|tp)(?![a-z])/) || t.match(/^(cm)hi/);
+  if (m) return m[1];
+  if (n.includes('exam')) return 'exam';
+  if (/^sa[eé]/.test(a) || /\bsa[eé]s?\b/.test(n)) return 'project';
   return 'other';
 }
 
@@ -133,7 +137,7 @@ function normalizeCourse(c, durations) {
     module:    module.name || module.abbrev || null,
     abbrev:    module.abbrev || null,
     type:      course.type || null,
-    category:  detectType(course.type, module.name),
+    category:  detectType(course.type, module.name, module.abbrev),
     day:       DAY_MAP[c.day] || c.day,
     dayIndex:  DAY_INDEX[c.day] ?? -1,
     start:     minutesToHHMM(startMin),

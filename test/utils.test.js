@@ -83,7 +83,37 @@ test('detectType et typeLabel : la categorie projet s ecrit "projet" cote front'
   assert.equal(u.detectType('Autre', 'Examen de maths'), 'exam');
   assert.equal(u.detectType('TD', 'Examen de maths'), 'td'); // le type explicite prime sur le nom
   assert.equal(u.detectType('Conf'), 'other');
+  assert.equal(u.detectType('Conf 45'), 'other');
   assert.equal(u.detectType(null), 'other');
   assert.equal(u.typeLabel('projet'), 'Projet');
   assert.equal(u.typeLabel('inconnu'), 'Autre');
+});
+
+test('detectType : nomenclature RT (type suffixe par la duree)', () => {
+  assert.equal(u.detectType('TP240'), 'tp');
+  assert.equal(u.detectType('TP120'), 'tp');
+  assert.equal(u.detectType('TD240'), 'td');
+  assert.equal(u.detectType('TD60'), 'td');
+  assert.equal(u.detectType('CM60'), 'cm');
+  assert.equal(u.detectType('CMHi5'), 'cm');
+  assert.equal(u.detectType('Examen'), 'exam');
+  assert.equal(u.detectType('Exam45'), 'exam');
+  assert.equal(u.detectType('ExamTP240'), 'exam');   // l examen prime sur le prefixe TP
+  assert.equal(u.detectType('CM240', 'Rattrapages examens S1'), 'cm'); // type explicite
+  // Une SAE RT est planifiee en TP240 : c est un TP, pas un projet
+  assert.equal(u.detectType('TP240', "S'initier aux reseaux informatiques", 'SAE12'), 'tp');
+});
+
+test('detectType : nomenclature GIM (CTRL, X) et repli SAE', () => {
+  assert.equal(u.detectType('CM90'), 'cm');
+  assert.equal(u.detectType('TD180'), 'td');
+  assert.equal(u.detectType('TP270'), 'tp');
+  assert.equal(u.detectType('CTRL90'), 'exam');
+  assert.equal(u.detectType('CTRL60'), 'exam');
+  assert.equal(u.detectType('X90', 'Activités Département 1', 'ACTDEP1'), 'other');
+  assert.equal(u.detectType('X90', 'Autonomies des SAE 3', 'SAE3_a'), 'projet');
+  assert.equal(u.detectType('X90', 'Installer un système Hydrogène', 'SAE52-ISP'), 'projet');
+  assert.equal(u.detectType('', 'Projets SAE en autonomie S5', ''), 'projet');
+  assert.equal(u.detectType('TD', 'Projets SAE en autonomie S5', 'SAES5'), 'td'); // CS : le TD prime
+  assert.equal(u.detectType('X90', 'Base de données', 'BD'), 'other');
 });

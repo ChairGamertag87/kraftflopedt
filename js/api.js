@@ -161,7 +161,7 @@ async function fetchSchedule(dept, promo, group) {
       const grpNames = groups.map(g => g.name);   // tableau de noms ex: ["1A"]
       const grpStr   = grpNames.join(', ');        // ex: "1A" ou "CE"
       const cPromo   = groups[0]?.train_prog || '';
-      const type     = detectType(course.type, name);
+      const type     = detectType(course.type, name, module.abbrev);
       const colorBg  = module.display?.color_bg  || null;
       const colorTxt = module.display?.color_txt || null;
 

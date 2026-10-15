@@ -94,19 +94,35 @@ function getDayIndex(day) {
 }
 
 /**
- * Détecte le type d'un cours depuis son champ "type" et son nom.
- * @param {string} type   — ex: "TP", "TD", "CM", "Projet"
- * @param {string} name   — nom du module (fallback)
+ * Détecte la catégorie d'un cours depuis son champ "type" FlOpEDT, le nom et
+ * l'abréviation du module.
+ *
+ * La nomenclature des types varie selon le département :
+ *   - INFO : CM, TD, TP, DS, QCM, Projet, Conf, Conf 45, Conf 2h
+ *   - CS   : CM, TD, TP
+ *   - RT   : CM, CM60..CM240, CMHi5, TD60..TD240, TP60..TP240, Examen, Exam45, ExamTP120..240
+ *   - GIM  : CM30..CM270, TD90..TD270, TP90..TP270, CTRL60/90 (contrôle), X30/X60/X90
+ * On lit donc le préfixe (CM/TD/TP suivi d'une durée) au lieu d'exiger une égalité
+ * stricte. Un type reconnu prime toujours sur le nom du module (un TD d'une SAE
+ * reste un TD) ; en dernier recours une SAE au type inconnu (ex. GIM "X90",
+ * "Autonomies des SAE") est classée projet plutôt qu'autre.
+ *
+ * @param {string} type    — ex: "TP", "TD240", "CM90", "Projet", "ExamTP240", "X90"
+ * @param {string} name    — nom du module (fallback)
+ * @param {string} abbrev  — abréviation du module (fallback, ex: "SAE11")
  * @returns {'cm'|'td'|'tp'|'projet'|'exam'|'other'}
  */
-function detectType(type, name = '') {
-  const t = (type || '').toLowerCase();
+function detectType(type, name = '', abbrev = '') {
+  const t = (type || '').toLowerCase().trim();
   const n = (name || '').toLowerCase();
-  if (t === 'cm')                                                     return 'cm';
-  if (t === 'td')                                                     return 'td';
-  if (t === 'tp')                                                     return 'tp';
-  if (t === 'projet')                                                 return 'projet';
-  if (t === 'ds' || t === 'qcm' || t.includes('exam') || n.includes('exam')) return 'exam';
+  const a = (abbrev || '').toLowerCase();
+  if (t.startsWith('projet'))                                            return 'projet';
+  if (t === 'ds' || t === 'qcm' || t.includes('exam') || t.startsWith('ctrl')) return 'exam';
+  const m = t.match(/^(cm|td|tp)(?![a-z])/) || t.match(/^(cm)hi/);
+  if (m)                                                                 return m[1];
+  // Type inconnu : on se rabat sur le module.
+  if (n.includes('exam'))                                                return 'exam';
+  if (/^sa[eé]/.test(a) || /\bsa[eé]s?\b/.test(n))                       return 'projet';
   return 'other';
 }
 
