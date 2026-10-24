@@ -195,7 +195,10 @@ async function fetchSchedule(dept, promo, group) {
 //  Cache localStorage
 // ════════════════════════════
 
-const CACHE_PREFIX = 'edt-cache-';
+// Prefixe versionne : un changement de format du cache ne doit plus bloquer
+// les visiteurs qui ont une entree a l'ancien format pendant 7 jours
+const CACHE_PREFIX = 'edt-cache-v2-';
+const LEGACY_CACHE_PREFIX = 'edt-cache-';
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 function cacheKey(dept, promo, group, week, year) {
@@ -216,7 +219,9 @@ function cacheLoad(dept, promo, group, week, year) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (Date.now() - data.ts > CACHE_MAX_AGE) {
+    // Une entree mal formee (courses qui n'est pas un tableau) faisait planter
+    // buildGrid a chaque chargement tant qu'elle n'expirait pas
+    if (!data || typeof data.ts !== 'number' || !Array.isArray(data.courses) || Date.now() - data.ts > CACHE_MAX_AGE) {
       localStorage.removeItem(key);
       return null;
     }
@@ -224,11 +229,12 @@ function cacheLoad(dept, promo, group, week, year) {
   } catch (_) { return null; }
 }
 
-/** Supprime les entrées de cache expirées (> 7 jours). */
+/** Supprime les entrées de cache expirées (> 7 jours) et celles d'un ancien format. */
 function cacheCleanup() {
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
-    if (!k || !k.startsWith(CACHE_PREFIX)) continue;
+    if (!k || !k.startsWith(LEGACY_CACHE_PREFIX)) continue;
+    if (!k.startsWith(CACHE_PREFIX)) { localStorage.removeItem(k); continue; }
     try {
       const d = JSON.parse(localStorage.getItem(k));
       if (Date.now() - d.ts > CACHE_MAX_AGE) localStorage.removeItem(k);
@@ -256,10 +262,20 @@ async function loadSchedule() {
 
   err.classList.remove('show');
 
-  // Cache first: show cached data immediately if available
-  const cached = cacheLoad(dept, promo, group, week, year);
-  if (cached && cached.courses && cached.courses.length > 0) {
-    buildGrid(cached.courses);
+  // Sans groupe (bouton Reessayer avant toute selection, promo changee), la
+  // requete chargeait toute la promo et la mettait en cache sous une cle sans groupe
+  if (!group) { showPrompt(); return; }
+
+  // Cache first: show cached data immediately if available. Un cache present
+  // mais vide (semaine de vacances) n'est pas un cache absent : hors ligne, il
+  // affichait "aucune copie locale n'existe" au lieu de "Aucun cours cette semaine"
+  const cached    = cacheLoad(dept, promo, group, week, year);
+  const has_cache = !!(cached && Array.isArray(cached.courses));
+  if (has_cache && cached.courses.length > 0) {
+    // Une entree de cache inattendue ne doit pas empecher le chargement reseau
+    try { buildGrid(cached.courses); } catch (e) { console.warn('[EDT] cache local illisible :', e.message); showLoading(); }
+  } else if (has_cache) {
+    showEmptyWeek();
   } else {
     showLoading();
   }
@@ -273,13 +289,7 @@ async function loadSchedule() {
     if (seq !== _loadSeq) return;
 
     if (courses.length === 0) {
-      _displayedCourses = [];
-      document.getElementById('schedule-container').innerHTML = `
-        <div class="state-box">
-          <span class="state-icon">📭</span>
-          Aucun cours cette semaine
-          <div class="state-sub">// semaine libre ou groupe sans cours</div>
-        </div>`;
+      showEmptyWeek();
     } else {
       buildGrid(courses);
     }
@@ -287,7 +297,7 @@ async function loadSchedule() {
     console.error('[EDT]', e);
     if (seq !== _loadSeq) return;
 
-    if (cached && cached.courses && cached.courses.length > 0) {
+    if (has_cache) {
       const age = Date.now() - cached.ts;
       const agoText = age < 3600000
         ? `${Math.round(age / 60000)} min`
@@ -295,6 +305,7 @@ async function loadSchedule() {
           ? `${Math.round(age / 3600000)}h`
           : `${Math.round(age / 86400000)}j`;
 
+      if (cached.courses.length === 0) showEmptyWeek();
       showError(`Hors-ligne — données du cache (${agoText})`);
     } else {
       showError(`Impossible de charger l'emploi du temps (${e.message})`);

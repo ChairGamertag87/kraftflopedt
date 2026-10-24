@@ -13,6 +13,43 @@ const TREE = [
 function load(fetchImpl) {
   return loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { fetch: fetchImpl });
 }
+
+// DOM minimal : un element par id, createElement et appendChild pour les chips ;
+// _active[conteneur] = valeur du chip actif (vide par innerHTML = '' comme en vrai)
+function fakeDocument() {
+  const els = {}, active = {};
+  const el = id => ({
+    id, className: '', _html: '', textContent: '', dataset: {}, children: [],
+    classList: { add() {}, remove() {}, toggle() {} },
+    appendChild(c) { this.children.push(c); },
+    get innerHTML() { return this._html; },
+    set innerHTML(v) { this._html = v; this.children = []; delete active[this.id]; },
+  });
+  // _chips[conteneur] = chips statiques (data-value) renvoyes par querySelectorAll
+  const chips = {};
+  const chipsOf = sel => { const m = /^#([\w-]+) \.sel-chip$/.exec(sel); return m ? (chips[m[1]] || []) : []; };
+  return {
+    _els: els, _active: active, _chips: chips,
+    getElementById: id => (els[id] = els[id] || el(id)),
+    querySelector: sel => {
+      const m = /^#([\w-]+) \.sel-chip\.active$/.exec(sel);
+      if (m) return active[m[1]] ? { dataset: { value: active[m[1]] } } : null;
+      return chipsOf(sel)[0] || null;
+    },
+    querySelectorAll: chipsOf,
+    createElement: () => el(''),
+  };
+}
+const chip = value => {
+  const c = { dataset: { value }, active: false };
+  c.classList = { toggle: (cls, on) => { c.active = on; }, add: () => { c.active = true; }, remove: () => { c.active = false; } };
+  return c;
+};
+function loadUi(fetchImpl, extra = {}) {
+  const document = fakeDocument();
+  const ctx = loadFront(['config.js', 'utils.js', 'state.js', 'ui.js', 'api.js', 'render.js'], { document, fetch: fetchImpl, ...extra });
+  return { ctx, document };
+}
 const okJson = body => async () => ({ ok: true, status: 200, json: async () => body });
 
 test('buildAncestorMap : chaque groupe connait son chemin jusqu a la racine', () => {
@@ -72,6 +109,102 @@ test('fetchDurations : seules les contraintes portant une duree sont gardees', a
   assert.equal(a.getDuration('CM', { CM: 85 }), 85);
   assert.equal(a.getDuration('Autre', { CM: 85 }), 85);
   assert.equal(a.getDuration('QCM', { QCM: 20 }), 20);
+});
+
+test('loadSchedule : sans groupe, aucune requete et retour a l invite (KF30056)', async () => {
+  let calls = 0;
+  const { ctx, document } = loadUi(async () => { calls++; return { ok: true, status: 200, json: async () => [] }; });
+  await ctx.loadSchedule();                       // querySelector -> null : aucun chip actif
+  assert.equal(calls, 0, 'toute la promo n est pas chargee');
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo et ton groupe/);
+});
+
+test('selectDept et changeWeek : une reponse en vol n ecrase pas l invite (KF30056)', async () => {
+  const pending = [];
+  const fetchImpl = () => new Promise(r => pending.push(() => r({ ok: true, status: 200, json: async () => [] })));
+  const { ctx, document } = loadUi(fetchImpl);
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT2', 'group-btns': '2A' });
+  const first = ctx.loadSchedule();                      // INFO BUT2 2A, reponse lente
+  assert.match(document._els['schedule-container'].innerHTML, /Chargement/);
+  ctx.selectDept({ classList: { add() {}, remove() {} } }); // clic RT avant la reponse
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/);
+  pending.splice(0).forEach(f => f());
+  await first;
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/, 'la reponse INFO 2A est ignoree');
+  assert.doesNotMatch(document._els['schedule-container'].innerHTML, /Aucun cours/);
+  // ▶ sans groupe : l'en-tete change, la grille reste a l'invite
+  document._els['schedule-container'].innerHTML = 'ancienne grille';
+  ctx.changeWeek(1);
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/);
+});
+
+test('loadSchedule : hors ligne, une semaine vide deja visitee n est pas "sans copie locale" (KF20065)', async () => {
+  const localStorage = { getItem: () => JSON.stringify({ ts: Date.now() - 60000, courses: [] }), setItem() {}, removeItem() {}, key: () => null, length: 0 };
+  const { ctx, document } = loadUi(async () => { throw new Error('Failed to fetch'); }, { localStorage });
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  assert.match(document._els['schedule-container'].innerHTML, /Aucun cours cette semaine/);
+  assert.doesNotMatch(document._els['schedule-container'].innerHTML, /aucune copie locale/);
+  assert.match(document._els['error-banner'].textContent, /Hors-ligne/);
+});
+
+test('fillPromoChips : aucune promo activee d office (KF30056)', () => {
+  const { ctx, document } = loadUi();
+  const container = document.getElementById('promo-btns');
+  ctx.fillPromoChips(container, ['BUT1', 'BUT2', 'BUT3']);
+  assert.equal(container.children.length, 3);
+  assert.ok(container.children.every(c => !c.className.includes('active')), 'aucun chip actif sans choix');
+  // state est une constante du contexte isole : on la modifie depuis l interieur
+  require('vm').runInContext("state.wanted = { promo: 'BUT2', group: '' }", ctx);
+  ctx.fillPromoChips(container, ['BUT1', 'BUT2', 'BUT3']);
+  assert.deepEqual(container.children.map(c => c.className.includes('active')), [false, true, false]);
+});
+
+test('cacheLoad : une entree mal formee est supprimee et ignoree (KF20066)', () => {
+  for (const raw of ['{"ts":1,"courses":"x"}', '{"ts":1,"courses":{}}', '{"courses":[]}', 'null', '[]']) {
+    const removed = [];
+    const localStorage = { getItem: () => raw.replace('"ts":1', `"ts":${Date.now()}`), setItem() {}, removeItem: k => removed.push(k), key: () => null, length: 0 };
+    const a = loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage });
+    assert.equal(a.cacheLoad('INFO', 'BUT1', '1A', 40, 2026), null, raw);
+    assert.ok(removed.length === 1 || raw === 'null' || raw === '[]', `entree supprimee pour ${raw}`);
+  }
+  const ok = { getItem: () => JSON.stringify({ ts: Date.now(), courses: [] }), setItem() {}, removeItem() {}, key: () => null, length: 0 };
+  assert.deepEqual(plain(loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage: ok }).cacheLoad('INFO', 'BUT1', '1A', 40, 2026).courses), []);
+});
+
+test('cacheCleanup : le prefixe est versionne, les entrees de l ancien format sont purgees (KF20066)', () => {
+  const store = { 'edt-cache-INFO-BUT1-1A-S40-2026': '{"ts":1,"courses":[]}', 'edt-cache-v2-INFO-BUT1-1A-S40-2026': JSON.stringify({ ts: Date.now(), courses: [] }), 'edt-selection': '{}' };
+  const localStorage = {
+    getItem: k => store[k] ?? null, setItem(k, v) { store[k] = v; }, removeItem(k) { delete store[k]; },
+    key: i => Object.keys(store)[i] ?? null, get length() { return Object.keys(store).length; },
+  };
+  const a = loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage });
+  assert.match(a.cacheKey('INFO', 'BUT1', '1A', 40, 2026), /^edt-cache-v2-/);
+  a.cacheCleanup();
+  assert.deepEqual(Object.keys(store).sort(), ['edt-cache-v2-INFO-BUT1-1A-S40-2026', 'edt-selection']);
+});
+
+test('readSavedSelection et activateChip : parametres d URL insensibles a la casse (KF10085)', () => {
+  const { ctx, document } = loadUi(undefined, { URLSearchParams, location: { search: '?dept=info&promo=but1&group=1a', pathname: '/' } });
+  assert.deepEqual(plain(ctx.readSavedSelection()), { dept: 'INFO', promo: 'BUT1', group: '1a' });
+  document._chips['group-btns'] = [chip('1A'), chip('1B')];
+  const found = ctx.activateChip('group-btns', '1a');
+  assert.equal(found && found.dataset.value, '1A');
+  assert.deepEqual(document._chips['group-btns'].map(c => c.active), [true, false]);
+});
+
+test('restoreSelection : selection inconnue -> banniere et URL nettoyee (KF10085)', () => {
+  const replaced = [];
+  const { ctx, document } = loadUi(undefined, {
+    URLSearchParams,
+    location: { search: '?dept=ZZZ&promo=BUT1&group=1A', pathname: '/edt' },
+    history: { replaceState: (s, t, url) => replaced.push(url) },
+  });
+  document._chips['dept-btns'] = [chip('INFO'), chip('RT')];
+  ctx.restoreSelection();
+  assert.equal(document._chips['dept-btns'][0].active, true, 'le premier departement reste actif');
+  assert.match(document._els['error-banner'].textContent, /Sélection inconnue/);
+  assert.deepEqual(replaced, ['/edt']);
 });
 
 test('cacheKey : une cle par departement, promo, groupe et semaine', () => {

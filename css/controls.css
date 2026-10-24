@@ -485,6 +485,26 @@
   margin-top: 12px;
   text-align: right;
 }
+/* Journee fermee : avis du CROUS a la place des plats */
+.crous-closed {
+  font-family: 'Special Elite', serif;
+  font-size: 0.9rem;
+  color: var(--ink-faded);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+.crous-closed-chip {
+  background: rgba(120, 110, 100, 0.12);
+  border-color: var(--ink-faded);
+  color: var(--ink-faded);
+  cursor: default;
+  pointer-events: none;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
 @media (max-width: 480px) {
   .crous-plats { columns: 1; }
 }

@@ -38,9 +38,10 @@ const SELECTION_KEY = 'edt-selection';
 function readSavedSelection() {
   const params = new URLSearchParams(location.search);
   if (params.get('dept')) {
+    // Un lien tape a la main arrive souvent en minuscules (?dept=info&promo=but1)
     return {
-      dept:  params.get('dept'),
-      promo: params.get('promo') || '',
+      dept:  params.get('dept').toUpperCase(),
+      promo: (params.get('promo') || '').toUpperCase(),
       group: params.get('group') || '',
     };
   }
@@ -76,7 +77,7 @@ function saveSelection() {
 function activateChip(containerId, value) {
   let found = null;
   document.querySelectorAll(`#${containerId} .sel-chip`).forEach(b => {
-    const match = value !== '' && b.dataset.value === value;
+    const match = value !== '' && b.dataset.value.toUpperCase() === value.toUpperCase();
     b.classList.toggle('active', match);
     if (match) found = b;
   });
@@ -93,12 +94,24 @@ function restoreSelection() {
   const saved = readSavedSelection();
   if (!saved) return;
   if (!activateChip('dept-btns', saved.dept)) {
-    // Département inconnu : on garde le défaut (premier chip)
+    // Département inconnu : on garde le défaut (premier chip) et on le dit
     const first = document.querySelector('#dept-btns .sel-chip');
     if (first) first.classList.add('active');
+    rejectSavedSelection();
     return;
   }
   state.wanted = { promo: saved.promo || '', group: saved.group || '' };
+}
+
+/**
+ * Sélection mémorisée introuvable (lien erroné, groupe disparu) : une bannière
+ * au lieu d'un silence, et l'URL est nettoyée pour ne pas la rejouer.
+ */
+function rejectSavedSelection() {
+  if (new URLSearchParams(location.search).has('dept')) {
+    try { history.replaceState(null, '', location.pathname); } catch (_) { /* history indisponible */ }
+  }
+  showError('Sélection inconnue (département, promo ou groupe) : choisis ton groupe dans le sélecteur');
 }
 
 /**
@@ -152,7 +165,8 @@ function changeWeek(delta) {
     state.currentWeek = 1;
   }
   updateWeekLabel();
-  if (getSelectedGroup()) loadSchedule();
+  // Sans groupe, loadSchedule remet l'invite (et invalide une reponse en vol)
+  loadSchedule();
 }
 
 // ════════════════════════════
@@ -161,22 +175,30 @@ function changeWeek(delta) {
 
 /** Clic sur un chip département. */
 function selectDept(btn) {
+  state.wanted = null; // un choix explicite annule la restauration en attente
   document.querySelectorAll('#dept-btns .sel-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  // Vider promos et groupes
+  // Vider promos et groupes, et la grille : elle montrait encore l'ancienne
+  // selection (loadSchedule sans groupe remet l'invite et invalide une reponse en vol)
   document.getElementById('promo-btns').innerHTML = '';
   document.getElementById('group-btns').innerHTML = '';
+  loadSchedule();
   updateSelectorLabel();
   loadGroupsFromAPI();
 }
 
 /** Clic sur un chip promo. */
 function selectPromo(btn) {
+  state.wanted = null; // un choix explicite annule la restauration en attente
   document.querySelectorAll('#promo-btns .sel-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   filterGroupsByPromo();
   updateSelectorLabel();
+  // Un groupe de meme nom peut rester actif dans la nouvelle promo : la grille
+  // doit suivre ; sinon loadSchedule remet l'invite au lieu de garder l'ancien EDT
+  if (getSelectedGroup()) saveSelection();
+  loadSchedule();
 }
 
 /** Clic sur un chip groupe : sélectionne, ferme le modal, charge l'EDT. */
@@ -220,6 +242,8 @@ async function loadGroupsFromAPI() {
     // Génère les chips de promo depuis l'arbre
     buildPromoChips();
     filterGroupsByPromo();
+    // L'arbre API fait foi : une promo ou un groupe toujours en attente n'existe pas
+    if (state.wanted && state.wanted.group) { state.wanted = null; rejectSavedSelection(); }
   } catch (e) {
     console.warn('[EDT] Impossible de charger les groupes :', e.message);
     if (getSelectedDept() !== dept) return;
@@ -241,13 +265,14 @@ function buildPromoChips() {
 }
 
 /**
- * Remplit les chips promo. La promo active est, dans l'ordre : celle attendue
- * par la restauration (state.wanted), celle déjà sélectionnée (les chips sont
- * reconstruits quand l'API répond après le fallback), sinon la première.
+ * Remplit les chips promo. La promo active est celle attendue par la
+ * restauration (state.wanted) ou celle déjà sélectionnée (les chips sont
+ * reconstruits quand l'API répond après le fallback) ; sinon aucune : une promo
+ * activée d'office donnait un libellé « RT · BUT1 » sans que rien ne soit choisi.
  */
 function fillPromoChips(container, promos) {
   const keep = (state.wanted && state.wanted.promo) || getSelectedPromo();
-  const activeIdx = Math.max(0, promos.indexOf(keep));
+  const activeIdx = promos.indexOf(keep);
 
   container.innerHTML = '';
   promos.forEach((p, i) => {

@@ -1,0 +1,63 @@
+# Tests unitaires puis construction des deux images Docker a chaque push et
+# pull request sur main. Aucune dependance npm : node --test suffit.
+# Le deploiement reste assure par le cron auto-update.sh sur le serveur ; ce
+# workflow sert a voir un commit casse avant ou juste apres qu'il parte en prod.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: Tests unitaires (node --test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --version
+      - run: node --test test/*.test.js
+
+  images:
+    name: Images Docker et fumee
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build adapter
+        run: docker build -f Dockerfile.adapter -t kraftflopedt-adapter:ci .
+
+      - name: Build web
+        run: docker build -f Dockerfile.web -t kraftflopedt-web:ci .
+
+      - name: Adapter demarre et /status repond (sans toucher FlOpEDT)
+        run: |
+          docker run -d --name adapter -p 3001:3001 -e DISABLE_REFRESH=1 -e DATA_DIR=/tmp/data kraftflopedt-adapter:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3001/status >/tmp/status.json 2>/dev/null; then break; fi
+            sleep 1
+          done
+          cat /tmp/status.json
+          node -e 'const s=require("/tmp/status.json"); if(!s.store||!s.config) process.exit(1)'
+          docker logs adapter
+          docker rm -f adapter
+
+      - name: Web sert index.html avec des assets versionnes et les en-tetes de securite
+        run: |
+          docker run -d --name web -p 8080:80 kraftflopedt-web:ci
+          for i in $(seq 1 20); do
+            if curl -fsS -o /tmp/index.html http://127.0.0.1:8080/ 2>/dev/null; then break; fi
+            sleep 1
+          done
+          grep -c '?v=' /tmp/index.html
+          curl -sSI http://127.0.0.1:8080/ | tee /tmp/headers.txt
+          grep -qi '^content-security-policy:' /tmp/headers.txt
+          grep -qi '^x-content-type-options: nosniff' /tmp/headers.txt
+          # le fallback SPA : un chemin inconnu renvoie index.html en 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/flopedt/x)" = 200
+          docker rm -f web

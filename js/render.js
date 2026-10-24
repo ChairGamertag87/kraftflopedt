@@ -9,6 +9,28 @@ let _displayedCourses = [];
 //  États UI
 // ════════════════════════════
 
+/** Remet la grille à l'invite initiale (même contenu que index.html) et oublie les cours affichés. */
+function showPrompt() {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">📋</span>
+      Sélectionne ta promo et ton groupe
+      <div class="state-sub">// clique sur le sélecteur ci-dessus pour commencer</div>
+    </div>`;
+}
+
+/** Semaine sans aucun cours (vacances, groupe sans cours). */
+function showEmptyWeek() {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">📭</span>
+      Aucun cours cette semaine
+      <div class="state-sub">// semaine libre ou groupe sans cours</div>
+    </div>`;
+}
+
 /** Affiche l'état "chargement en cours". */
 function showLoading() {
   document.getElementById('schedule-container').innerHTML = `

@@ -203,7 +203,8 @@ function cleanText(s) {
 
 /** Extrait le bloc <resto id="rXXX">...</resto> du menu.xml (null si absent). */
 function extractResto(xml, restoId) {
-  const re = new RegExp(`<resto\\s+id="${restoId}"[^>]*?(/>|>)`, 'i');
+  // id n'est pas forcement le premier attribut de la balise
+  const re = new RegExp(`<resto\\b[^>]*?\\bid="${restoId}"[^>]*?(/>|>)`, 'i');
   const m  = re.exec(xml);
   if (!m) return null;
   if (m[1] === '/>') return '';
@@ -241,6 +242,11 @@ function normaliseLibelle(s) {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
+// Avis de fermeture publie a la place des plats ("Structure fermee", "RU clos",
+// "Fermeture exceptionnelle") ; mots entiers seulement, "Poulet fermier" ou
+// "Closerie" ne doivent pas fermer le restaurant
+const CLOSED_RE = /\b(ferm(e|ee|é|ée|és|ées|eture)|clos)(?![a-zàâéèêëîïôùûüç])/i;
+
 function isNoise(plat) {
   if (!plat) return true;
   if (plat.startsWith('*')) return true;              // "*sous reserve de changement"
@@ -267,6 +273,9 @@ function parseMenuHtml(html) {
     } else if (mode === 'h4') {
       if (!service) { service = { moment: 'midi', categories: [] }; services.push(service); }
       category = { libelle: normaliseLibelle(text) || 'Menu', plats: [] };
+      // "Structure fermee du ... au ..." arrive comme un h4 sans plat : sans
+      // cette trace le jour disparaissait et le front annoncait un menu pas encore publie
+      if (CLOSED_RE.test(text)) category.notice = text;
       service.categories.push(category);
     } else if (mode === 'li') {
       if (!isNoise(text)) {
@@ -297,9 +306,15 @@ function parseMenuHtml(html) {
   }
   if (mode) { buf += html.slice(last); flush(); }
 
-  // Nettoyage : categories vides puis services vides supprimes
-  for (const s of services) s.categories = s.categories.filter(c => c.plats.length);
-  return services.filter(s => s.categories.length);
+  // Nettoyage : categories vides puis services vides supprimes ; un avis de
+  // fermeture sans plat remonte au service pour que la journee soit conservee
+  for (const s of services) {
+    const closed = s.categories.find(c => c.notice && !c.plats.length);
+    // seulement si rien n'est servi : un avis a cote de vrais plats ne ferme pas le service
+    if (closed && !s.categories.some(c => c.plats.length)) s.notice = closed.notice;
+    s.categories = s.categories.filter(c => c.plats.length).map(({ libelle, plats }) => ({ libelle, plats }));
+  }
+  return services.filter(s => s.categories.length || s.notice);
 }
 
 /** Toutes les journees publiees pour le restaurant, triees par date. */
@@ -381,11 +396,27 @@ async function fetchFallback() {
 //  API publique
 // ════════════════════════════════════════════════════
 
+/** Date du jour en heure de Paris (AAAA-MM-JJ), comme le filtre de l'adapter. */
+function parisToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+/** Repli CROUStillant : jamais d'exception, `error` renseigne si rien n'est obtenu. */
+async function fallbackMenus(err) {
+  let days = [];
+  try { days = await fetchFallback(); } catch (e) { err += ` ; repli : ${e.message}`; }
+  const result = { source: 'croustillant', fetchedAt: new Date().toISOString(), lastModified: null, stale: false, found: days.length > 0, days };
+  if (!days.length) result.error = `menus indisponibles (${err})`;
+  return result;
+}
+
 /**
  * Menus du restaurant : { restaurant, region, source, fetchedAt, stale, days: [...] }
  * Ne jette jamais pour une panne amont : `days` peut etre vide, `error` renseigne.
+ * @param {string} [today]  AAAA-MM-JJ : une copie locale sans aucun jour a partir
+ *   de cette date ne vaut rien, le repli est alors tente si le flux est injoignable
  */
-async function getMenus() {
+async function getMenus(today = parisToday()) {
   const fresh = await ensureFresh();
   let result;
 
@@ -400,13 +431,13 @@ async function getMenus() {
       days:      parsed.days,
     };
     if (!fresh.ok) result.error = `flux CNOUS injoignable, derniere version connue servie (${fresh.error})`;
+    // La copie locale est rechargee au demarrage : sans ce test le repli n'etait
+    // plus jamais tente apres le premier succes, meme avec des jours tous passes
+    const useful = parsed.found && parsed.days.some(d => d.date >= today);
+    if (!fresh.ok && !useful) result = await fallbackMenus(fresh.error);
   } else {
     // Aucune copie locale et flux injoignable : repli CROUStillant
-    let days = [];
-    let err  = fresh.error;
-    try { days = await fetchFallback(); } catch (e) { err += ` ; repli : ${e.message}`; }
-    result = { source: 'croustillant', fetchedAt: new Date().toISOString(), lastModified: null, stale: false, found: days.length > 0, days };
-    if (!days.length) result.error = `menus indisponibles (${err})`;
+    result = await fallbackMenus(fresh.error);
   }
 
   return { restaurant: RESTAURANT, region: CONFIG.region, ...result };

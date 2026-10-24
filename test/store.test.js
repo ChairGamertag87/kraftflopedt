@@ -93,3 +93,187 @@ test('ENDPOINTS : quatre endpoints FlOpEDT, rien d autre', () => {
     '/fr/api/groups/structural/tree/', '/fr/api/rooms/all/',
   ]);
 });
+
+// ── Appels FlOpEDT simules : https.request remplace par un faux serveur ──
+const https = require('https');
+const { EventEmitter } = require('events');
+
+/** Remplace https.request ; `scenario(req, cb)` joue la reponse. Renvoie la fonction de restauration. */
+function fakeUpstream(scenario) {
+  const original = https.request;
+  const original_gap = store.CONFIG.minGap;
+  store.CONFIG.minGap = 1;
+  https.request = (opts, cb) => {
+    fakeUpstream.calls++;
+    const req = new EventEmitter();
+    req.end = () => scenario(req, cb);
+    req.destroy = err => {
+      if (req.destroyed) return;
+      req.destroyed = true;
+      if (err) req.emit('error', err);
+      req.emit('close');
+    };
+    return req;
+  };
+  return () => { https.request = original; store.CONFIG.minGap = original_gap; };
+}
+fakeUpstream.calls = 0;
+
+/** La Map pending est privee : si elle est purgee, un nouveau refresh sur la meme cle declenche un nouvel appel. */
+async function assertPendingPurged(endpoint, query) {
+  const before = fakeUpstream.calls;
+  await store.refresh(endpoint, query).catch(() => {});
+  assert.equal(fakeUpstream.calls, before + 1, 'un nouvel appel part : la cle n est plus dans pending');
+}
+
+function fakeResponse(statusCode = 200) {
+  const res = new EventEmitter();
+  res.statusCode = statusCode;
+  res.complete = false;
+  return res;
+}
+
+test('fetchUpstream : une reponse complete est servie et la file est liberee', async () => {
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[{"ok":1}]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const entry = await store.refresh(TREE, { dept: 'INFO' });
+    assert.deepEqual(entry.body, [{ ok: 1 }]);
+    assert.equal(store.status().queue.inFlight, 0);
+  } finally { restore(); }
+});
+
+test('get : une cle stale en echec recent ne relance pas FlOpEDT a chaque lecture (KF20068)', async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const saved_static = store.CONFIG.refreshStatic;
+  let fail = false;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse(fail ? 500 : 200);
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    await store.refresh(TREE, { dept: 'GIM' });          // entree en store
+    store.CONFIG.refreshStatic = 1;                       // elle est aussitot stale
+    await sleep(5);
+    fail = true;
+    const calls_before = fakeUpstream.calls;
+    assert.equal((await store.get(TREE, { dept: 'GIM' })).status, 'stale');
+    await sleep(20);                                      // le refresh de fond echoue -> failedAt
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'premier rafraichissement tente');
+    for (let i = 0; i < 5; i++) assert.equal((await store.get(TREE, { dept: 'GIM' })).status, 'stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'pas de nouvel appel avant FAILURE_TTL_MS');
+  } finally { store.CONFIG.refreshStatic = saved_static; restore(); }
+});
+
+test('get : une semaine passee n est jamais stale, une semaine entretenue l est (KF10089)', async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const saved_courses = store.CONFIG.refreshCourses;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    // Deuxieme semaine de juillet de l annee universitaire en cours : dans la
+    // fenetre a la demande, mais jamais dans weeksToMaintain (plus de 2 semaines passees)
+    const now = new Date();
+    const start_year = now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+    const july = new Date(Date.UTC(start_year, 6, 10));
+    july.setUTCDate(july.getUTCDate() + 4 - (july.getUTCDay() || 7));
+    const past_week = Math.ceil((((july - Date.UTC(july.getUTCFullYear(), 0, 1)) / 86400000) + 1) / 7);
+    const past = { dept: 'INFO', week: String(past_week), year: String(july.getUTCFullYear()) };
+    const maintained = store.weeksToMaintain(now)[0];
+    const current = { dept: 'INFO', week: String(maintained.week), year: String(maintained.year) };
+
+    await store.refresh(COURSES, store.validate(COURSES, past));
+    await store.refresh(COURSES, store.validate(COURSES, current));
+    store.CONFIG.refreshCourses = 1;
+    await sleep(5);
+
+    const calls_before = fakeUpstream.calls;
+    assert.equal((await store.get(COURSES, past)).status, 'hit', 'semaine passee servie sans etre stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before, 'aucun appel FlOpEDT pour une semaine passee');
+    assert.equal((await store.get(COURSES, current)).status, 'stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'la semaine entretenue est rafraichie');
+  } finally { store.CONFIG.refreshCourses = saved_courses; restore(); }
+});
+
+test('start : les fichiers d une annee universitaire passee sont supprimes au chargement (KF10089)', () => {
+  const fs = require('fs'), path = require('path');
+  const dir = store.CONFIG.dataDir;
+  fs.mkdirSync(dir, { recursive: true });
+  const old_key = 'fetch-scheduledcourses__dept=INFO&week=40&work_copy=0&year=2021';
+  const static_key = 'rooms-all__dept=INFO';
+  const write = (key, endpoint, params) => fs.writeFileSync(path.join(dir, `${key}.json`),
+    JSON.stringify({ key, endpoint, params, fetchedAt: new Date().toISOString(), body: [] }));
+  write(old_key, COURSES, { dept: 'INFO', week: 40, year: 2021, work_copy: 0 });
+  write(static_key, '/fr/api/rooms/all/', { dept: 'INFO' });
+  store.CONFIG.disableRefresh = true;
+  try {
+    store.start();
+    assert.equal(fs.existsSync(path.join(dir, `${old_key}.json`)), false, 'semaine de 2021 supprimee');
+    assert.equal(fs.existsSync(path.join(dir, `${static_key}.json`)), true, 'statique conserve');
+    assert.ok(store.entries('/fr/api/rooms/all/').some(e => e.key === static_key));
+    assert.ok(!store.entries(COURSES).some(e => e.key === old_key));
+  } finally { fs.rmSync(path.join(dir, `${static_key}.json`), { force: true }); fs.rmSync(path.join(dir, `${old_key}.json`), { force: true }); }
+});
+
+test('refreshCourses : au demarrage, seules les semaines absentes ou perimees sont demandees (KF10088)', async () => {
+  const saved_depts = store.CONFIG.depts;
+  store.CONFIG.depts = ['INFO'];
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const total = store.weeksToMaintain().length;
+    let before = fakeUpstream.calls;
+    await store.refreshCourses({ only_outdated: true });
+    assert.ok(fakeUpstream.calls - before > 0, 'les semaines absentes sont demandees');
+    before = fakeUpstream.calls;
+    await store.refreshCourses({ only_outdated: true });
+    assert.equal(fakeUpstream.calls - before, 0, 'store a jour : aucun appel au demarrage');
+    before = fakeUpstream.calls;
+    await store.refreshCourses();
+    assert.equal(fakeUpstream.calls - before, total, 'la passe periodique reste complete');
+  } finally { store.CONFIG.depts = saved_depts; restore(); }
+});
+
+test('fetchUpstream : reponse tronquee apres les en-tetes -> rejet, file liberee (KF40055)', async () => {
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    // Content-Length jamais atteint : la connexion se ferme sans 'end'
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[{"a":')); res.emit('close'); });
+  });
+  try {
+    await assert.rejects(store.refresh(TREE, { dept: 'RT' }), /tronquee/);
+    assert.equal(store.status().queue.inFlight, 0, 'drain ne reste pas bloque');
+    await assertPendingPurged(TREE, { dept: 'RT' });
+  } finally { restore(); }
+});
+
+test('fetchUpstream : reponse au goutte-a-goutte -> borne sur la duree totale (KF40055)', async () => {
+  const saved = store.CONFIG.upstreamTimeout;
+  store.CONFIG.upstreamTimeout = 40; // duree totale max = 80 ms
+  let timer;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    const original_destroy = req.destroy;
+    req.destroy = err => { clearInterval(timer); original_destroy(err); };
+    setImmediate(() => {
+      cb(res);
+      // un octet toutes les 10 ms : jamais d'inactivite, jamais de fin
+      timer = setInterval(() => res.emit('data', Buffer.from('[')), 10);
+    });
+  });
+  try {
+    await assert.rejects(store.refresh(TREE, { dept: 'CS' }), /Duree maximale/);
+    assert.equal(store.status().queue.inFlight, 0);
+    clearInterval(timer);
+    await assertPendingPurged(TREE, { dept: 'CS' });
+  } finally { clearInterval(timer); store.CONFIG.upstreamTimeout = saved; restore(); }
+});

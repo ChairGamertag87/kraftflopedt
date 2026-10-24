@@ -117,15 +117,30 @@ function fileOf(key) { return path.join(CONFIG.dataDir, `${key}.json`); }
 
 function loadFromDisk() {
   fs.mkdirSync(CONFIG.dataDir, { recursive: true });
-  let n = 0;
+  let n = 0, purged = 0;
   for (const f of fs.readdirSync(CONFIG.dataDir)) {
     if (!f.endsWith('.json') || f.startsWith('.')) continue;
     try {
       const e = JSON.parse(fs.readFileSync(path.join(CONFIG.dataDir, f), 'utf8'));
-      if (e && e.key && e.endpoint && e.body !== undefined) { mem.set(e.key, e); n++; }
+      if (!(e && e.key && e.endpoint && e.body !== undefined)) continue;
+      // Semaine d'une annee universitaire passee : plus jamais servie ni
+      // entretenue, le fichier ne ferait que grossir le store
+      if (isPastAcademicYear(e)) { fs.unlinkSync(path.join(CONFIG.dataDir, f)); purged++; continue; }
+      mem.set(e.key, e); n++;
     } catch (err) { warn(`fichier ignore ${f}: ${err.message}`); }
   }
-  log(`${n} entree(s) chargee(s) depuis ${CONFIG.dataDir}`);
+  log(`${n} entree(s) chargee(s) depuis ${CONFIG.dataDir}${purged ? `, ${purged} fichier(s) d'une annee universitaire passee supprime(s)` : ''}`);
+}
+
+function isPastAcademicYear(entry) {
+  if (ENDPOINTS[entry.endpoint]?.kind !== 'courses' || !entry.params) return false;
+  return !weekInWindow(Number(entry.params.year), Number(entry.params.week));
+}
+
+/** Une semaine est entretenue si elle fait partie de weeksToMaintain() ; le statique l'est toujours. */
+function isMaintained(endpoint, params, now = new Date()) {
+  if (ENDPOINTS[endpoint].kind !== 'courses') return true;
+  return weeksToMaintain(now).some(w => w.year === params.year && w.week === params.week);
 }
 
 function persist(entry) {
@@ -147,6 +162,14 @@ const failedAt = new Map(); // key -> timestamp ms
 
 function fetchUpstream(endpoint, params) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let deadline;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      fn(value);
+    };
     const req = https.request({
       hostname: FLOPEDT_HOST,
       path:     `${endpoint}?${queryString(params)}`,
@@ -163,21 +186,41 @@ function fetchUpstream(endpoint, params) {
       // caractere multi-octets (un "é" a cheval sur deux morceaux devenait U+FFFD)
       const chunks = [];
       res.on('data', d => chunks.push(d));
+      res.on('error', e => settle(reject, e));
+      // Connexion fermee avant la fin du corps (Content-Length non atteint, chunk
+      // final absent) : 'end' n'est jamais emis, sans ceci la promesse restait pendante
+      res.on('close', () => {
+        if (!res.complete) settle(reject, new Error(`Reponse tronquee sur ${endpoint}`));
+      });
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode} sur ${endpoint}`));
+          return settle(reject, new Error(`HTTP ${res.statusCode} sur ${endpoint}`));
         }
         let body;
         try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-        catch (e) { return reject(new Error(`JSON invalide sur ${endpoint}: ${e.message}`)); }
-        if (body === null || typeof body !== 'object') return reject(new Error(`Reponse inattendue sur ${endpoint}`));
-        resolve(body);
+        catch (e) { return settle(reject, new Error(`JSON invalide sur ${endpoint}: ${e.message}`)); }
+        if (body === null || typeof body !== 'object') return settle(reject, new Error(`Reponse inattendue sur ${endpoint}`));
+        settle(resolve, body);
       });
     });
+    // L'option timeout ne couvre que l'inactivite du socket : une reponse au
+    // goutte-a-goutte la contourne, d'ou une borne sur la duree totale de l'appel
+    deadline = setTimeout(() => req.destroy(new Error(`Duree maximale ${upstreamDeadlineMs()} ms depassee sur ${endpoint}`)), upstreamDeadlineMs());
+    deadline.unref();
     req.on('timeout', () => req.destroy(new Error(`Timeout ${CONFIG.upstreamTimeout} ms sur ${endpoint}`)));
-    req.on('error', reject);
+    req.on('error', e => settle(reject, e));
     req.end();
   });
+}
+
+/** Duree totale maximale d'un appel FlOpEDT (deux fois le delai d'inactivite). */
+function upstreamDeadlineMs() { return 2 * CONFIG.upstreamTimeout; }
+
+/** Rejette apres ms, pour ne jamais bloquer la file sur une promesse qui ne se regle pas. */
+function watchdog(ms, message) {
+  let timer;
+  const p = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); timer.unref(); });
+  return { promise: p, cancel: () => clearTimeout(timer) };
 }
 
 // File d'attente : les demandes "a la demande" passent devant le rafraichissement
@@ -199,8 +242,11 @@ async function drain() {
       if (wait > 0) await sleep(wait);
       lastCallAt = Date.now();
       upstream.calls++;
+      // Filet de securite : si l'appel ne se regle pas malgre ses propres delais,
+      // la file ne doit pas rester gelee (pending jamais purge, draining a true)
+      const guard = watchdog(upstreamDeadlineMs() + CONFIG.upstreamTimeout, `Appel FlOpEDT sans reponse sur ${job.endpoint}`);
       try {
-        const body  = await fetchUpstream(job.endpoint, job.params);
+        const body  = await Promise.race([fetchUpstream(job.endpoint, job.params), guard.promise]);
         const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: new Date().toISOString(), body };
         mem.set(job.key, entry);
         try { persist(entry); } catch (e) { warn(`ecriture impossible ${job.key}: ${e.message}`); }
@@ -214,6 +260,7 @@ async function drain() {
         upstream.lastErrorAt = new Date().toISOString();
         job.reject(e);
       } finally {
+        guard.cancel();
         pending.delete(job.key);
       }
     }
@@ -258,9 +305,15 @@ async function get(endpoint, query) {
   if (entry) {
     const age = Date.now() - Date.parse(entry.fetchedAt);
     let status = 'hit';
-    if (age > 2 * maxAgeOf(endpoint)) {
+    // Une semaine passee n'est plus entretenue : servie telle quelle, jamais
+    // stale (chaque lecture relancait sinon un appel FlOpEDT pour des cours finis)
+    if (age > 2 * maxAgeOf(endpoint) && isMaintained(endpoint, params)) {
       status = 'stale';
-      if (!CONFIG.disableRefresh) refresh(endpoint, params, 5).catch(() => {});
+      // Meme garde que le chemin miss : apres un echec, pas de nouvel appel
+      // FlOpEDT a chaque lecture tant que FAILURE_TTL_MS n'est pas ecoule
+      const last_fail = failedAt.get(key);
+      const retry_ok  = !last_fail || Date.now() - last_fail >= CONFIG.failureTtl;
+      if (!CONFIG.disableRefresh && retry_ok) refresh(endpoint, params, 5).catch(() => {});
     }
     return { body: entry.body, fetchedAt: entry.fetchedAt, status };
   }
@@ -361,11 +414,23 @@ async function runJobs(name, jobs) {
   log(`rafraichissement ${name} termine : ${r.ok} ok, ${r.failed} echec(s), ${Math.round((Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000)} s`);
 }
 
-function refreshCourses() {
+/**
+ * @param {object}  [opts]
+ * @param {boolean} [opts.only_outdated]  ne met en file que les semaines absentes
+ *   ou plus vieilles que REFRESH_COURSES_MS (demarrage : le store est en general
+ *   a jour, une passe complete de ~160 appels pour rien ferait bannir l'IP en
+ *   cas de redemarrages en boucle)
+ */
+function refreshCourses({ only_outdated = false } = {}) {
   const jobs = [];
   for (const w of weeksToMaintain()) {
     for (const dept of CONFIG.depts) {
-      jobs.push({ endpoint: '/fr/api/fetch/scheduledcourses/', params: { dept, week: w.week, year: w.year, work_copy: 0 } });
+      const params = { dept, week: w.week, year: w.year, work_copy: 0 };
+      if (only_outdated) {
+        const entry = mem.get(keyOf('/fr/api/fetch/scheduledcourses/', params));
+        if (entry && Date.now() - Date.parse(entry.fetchedAt) <= CONFIG.refreshCourses) continue;
+      }
+      jobs.push({ endpoint: '/fr/api/fetch/scheduledcourses/', params });
     }
   }
   return runJobs('courses', jobs);
@@ -404,7 +469,7 @@ function start() {
   // puis les emplois du temps.
   (async () => {
     if (staticAge() > CONFIG.refreshStatic) await refreshStatic();
-    await refreshCourses();
+    await refreshCourses({ only_outdated: true });
   })().catch(e => warn(`rafraichissement initial : ${e.message}`));
 
   setInterval(() => refreshStatic().catch(() => {}),  CONFIG.refreshStatic).unref();
@@ -439,4 +504,4 @@ function status() {
   };
 }
 
-module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, start, status, weeksToMaintain, weekInWindow };
+module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, refreshCourses, start, status, weeksToMaintain, weekInWindow };

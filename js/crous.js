@@ -59,8 +59,7 @@ async function loadCrousMenu() {
     })
     .catch(e => {
       console.warn('[CROUS] menu indisponible :', e.message);
-      result.innerHTML = '<div class="rooms-hint">😕 Le menu est indisponible pour le moment.<br>'
-        + 'Le flux du CROUS ne répond pas, réessaie un peu plus tard.</div>';
+      renderCrousUnavailable();
     })
     .finally(() => { _crousPromise = null; });
 }
@@ -92,13 +91,29 @@ function crousDayLong(iso) {
   return crousParseDate(iso).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+function renderCrousUnavailable() {
+  document.getElementById('crous-result').innerHTML = '<div class="rooms-hint">😕 Le menu est indisponible pour le moment.<br>'
+    + 'Le flux du CROUS ne répond pas, réessaie un peu plus tard.</div>';
+  document.getElementById('crous-meta').textContent = '';
+}
+
 function renderCrousDays() {
-  const days      = (_crousData && _crousData.days) || [];
+  // Une reponse mise en cache la veille au soir contient encore le jour passe
+  const today     = crousTodayIso();
+  const days      = ((_crousData && _crousData.days) || []).filter(d => d.date >= today);
   const container = document.getElementById('crous-days');
   const result    = document.getElementById('crous-result');
   const meta      = document.getElementById('crous-meta');
 
   container.innerHTML = '';
+
+  // L'adapter distingue panne du flux (error) et restaurant absent (found faux) :
+  // les presenter comme un menu pas encore publie cachait la panne a tout le monde
+  if (_crousData && (_crousData.found === false || (_crousData.error && !days.length))) {
+    console.error('[CROUS]', _crousData.error || 'restaurant absent du flux');
+    renderCrousUnavailable();
+    return;
+  }
 
   if (!days.length) {
     result.innerHTML = '<div class="rooms-hint">🍽️ Aucun menu publié pour les prochains jours.<br>'
@@ -125,6 +140,9 @@ function renderCrousDays() {
     html += `<div class="crous-service">`;
     if (day.services.length > 1 || svc.moment !== 'midi') {
       html += `<div class="crous-service-title">${CROUS_MOMENT_LABEL[svc.moment] || crousEscape(svc.moment)}</div>`;
+    }
+    if (svc.notice) {
+      html += `<div class="crous-closed"><span class="sel-chip crous-closed-chip">Fermé</span>${crousEscape(svc.notice)}</div>`;
     }
     for (const cat of svc.categories) {
       html += `<div class="crous-cat">
