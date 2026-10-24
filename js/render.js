@@ -9,6 +9,17 @@ let _displayedCourses = [];
 //  États UI
 // ════════════════════════════
 
+/** Remet la grille à l'invite initiale (même contenu que index.html) et oublie les cours affichés. */
+function showPrompt() {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">📋</span>
+      Sélectionne ta promo et ton groupe
+      <div class="state-sub">// clique sur le sélecteur ci-dessus pour commencer</div>
+    </div>`;
+}
+
 /** Affiche l'état "chargement en cours". */
 function showLoading() {
   document.getElementById('schedule-container').innerHTML = `

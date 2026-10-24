@@ -13,6 +13,31 @@ const TREE = [
 function load(fetchImpl) {
   return loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { fetch: fetchImpl });
 }
+
+// DOM minimal : un element par id, createElement et appendChild pour les chips ;
+// _active[conteneur] = valeur du chip actif (vide par innerHTML = '' comme en vrai)
+function fakeDocument() {
+  const els = {}, active = {};
+  const el = id => ({
+    id, className: '', _html: '', textContent: '', dataset: {}, children: [],
+    classList: { add() {}, remove() {}, toggle() {} },
+    appendChild(c) { this.children.push(c); },
+    get innerHTML() { return this._html; },
+    set innerHTML(v) { this._html = v; this.children = []; delete active[this.id]; },
+  });
+  return {
+    _els: els, _active: active,
+    getElementById: id => (els[id] = els[id] || el(id)),
+    querySelector: sel => { const m = /^#([\w-]+) \.sel-chip\.active$/.exec(sel); return m && active[m[1]] ? { dataset: { value: active[m[1]] } } : null; },
+    querySelectorAll: () => [],
+    createElement: () => el(''),
+  };
+}
+function loadUi(fetchImpl) {
+  const document = fakeDocument();
+  const ctx = loadFront(['config.js', 'utils.js', 'state.js', 'ui.js', 'api.js', 'render.js'], { document, fetch: fetchImpl });
+  return { ctx, document };
+}
 const okJson = body => async () => ({ ok: true, status: 200, json: async () => body });
 
 test('buildAncestorMap : chaque groupe connait son chemin jusqu a la racine', () => {
@@ -72,6 +97,45 @@ test('fetchDurations : seules les contraintes portant une duree sont gardees', a
   assert.equal(a.getDuration('CM', { CM: 85 }), 85);
   assert.equal(a.getDuration('Autre', { CM: 85 }), 85);
   assert.equal(a.getDuration('QCM', { QCM: 20 }), 20);
+});
+
+test('loadSchedule : sans groupe, aucune requete et retour a l invite (KF30056)', async () => {
+  let calls = 0;
+  const { ctx, document } = loadUi(async () => { calls++; return { ok: true, status: 200, json: async () => [] }; });
+  await ctx.loadSchedule();                       // querySelector -> null : aucun chip actif
+  assert.equal(calls, 0, 'toute la promo n est pas chargee');
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo et ton groupe/);
+});
+
+test('selectDept et changeWeek : une reponse en vol n ecrase pas l invite (KF30056)', async () => {
+  const pending = [];
+  const fetchImpl = () => new Promise(r => pending.push(() => r({ ok: true, status: 200, json: async () => [] })));
+  const { ctx, document } = loadUi(fetchImpl);
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT2', 'group-btns': '2A' });
+  const first = ctx.loadSchedule();                      // INFO BUT2 2A, reponse lente
+  assert.match(document._els['schedule-container'].innerHTML, /Chargement/);
+  ctx.selectDept({ classList: { add() {}, remove() {} } }); // clic RT avant la reponse
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/);
+  pending.splice(0).forEach(f => f());
+  await first;
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/, 'la reponse INFO 2A est ignoree');
+  assert.doesNotMatch(document._els['schedule-container'].innerHTML, /Aucun cours/);
+  // ▶ sans groupe : l'en-tete change, la grille reste a l'invite
+  document._els['schedule-container'].innerHTML = 'ancienne grille';
+  ctx.changeWeek(1);
+  assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/);
+});
+
+test('fillPromoChips : aucune promo activee d office (KF30056)', () => {
+  const { ctx, document } = loadUi();
+  const container = document.getElementById('promo-btns');
+  ctx.fillPromoChips(container, ['BUT1', 'BUT2', 'BUT3']);
+  assert.equal(container.children.length, 3);
+  assert.ok(container.children.every(c => !c.className.includes('active')), 'aucun chip actif sans choix');
+  // state est une constante du contexte isole : on la modifie depuis l interieur
+  require('vm').runInContext("state.wanted = { promo: 'BUT2', group: '' }", ctx);
+  ctx.fillPromoChips(container, ['BUT1', 'BUT2', 'BUT3']);
+  assert.deepEqual(container.children.map(c => c.className.includes('active')), [false, true, false]);
 });
 
 test('cacheKey : une cle par departement, promo, groupe et semaine', () => {

@@ -256,6 +256,10 @@ async function loadSchedule() {
 
   err.classList.remove('show');
 
+  // Sans groupe (bouton Reessayer avant toute selection, promo changee), la
+  // requete chargeait toute la promo et la mettait en cache sous une cle sans groupe
+  if (!group) { showPrompt(); return; }
+
   // Cache first: show cached data immediately if available
   const cached = cacheLoad(dept, promo, group, week, year);
   if (cached && cached.courses && cached.courses.length > 0) {

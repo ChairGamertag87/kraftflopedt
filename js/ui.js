@@ -152,7 +152,8 @@ function changeWeek(delta) {
     state.currentWeek = 1;
   }
   updateWeekLabel();
-  if (getSelectedGroup()) loadSchedule();
+  // Sans groupe, loadSchedule remet l'invite (et invalide une reponse en vol)
+  loadSchedule();
 }
 
 // ════════════════════════════
@@ -161,22 +162,30 @@ function changeWeek(delta) {
 
 /** Clic sur un chip département. */
 function selectDept(btn) {
+  state.wanted = null; // un choix explicite annule la restauration en attente
   document.querySelectorAll('#dept-btns .sel-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  // Vider promos et groupes
+  // Vider promos et groupes, et la grille : elle montrait encore l'ancienne
+  // selection (loadSchedule sans groupe remet l'invite et invalide une reponse en vol)
   document.getElementById('promo-btns').innerHTML = '';
   document.getElementById('group-btns').innerHTML = '';
+  loadSchedule();
   updateSelectorLabel();
   loadGroupsFromAPI();
 }
 
 /** Clic sur un chip promo. */
 function selectPromo(btn) {
+  state.wanted = null; // un choix explicite annule la restauration en attente
   document.querySelectorAll('#promo-btns .sel-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   filterGroupsByPromo();
   updateSelectorLabel();
+  // Un groupe de meme nom peut rester actif dans la nouvelle promo : la grille
+  // doit suivre ; sinon loadSchedule remet l'invite au lieu de garder l'ancien EDT
+  if (getSelectedGroup()) saveSelection();
+  loadSchedule();
 }
 
 /** Clic sur un chip groupe : sélectionne, ferme le modal, charge l'EDT. */
@@ -241,13 +250,14 @@ function buildPromoChips() {
 }
 
 /**
- * Remplit les chips promo. La promo active est, dans l'ordre : celle attendue
- * par la restauration (state.wanted), celle déjà sélectionnée (les chips sont
- * reconstruits quand l'API répond après le fallback), sinon la première.
+ * Remplit les chips promo. La promo active est celle attendue par la
+ * restauration (state.wanted) ou celle déjà sélectionnée (les chips sont
+ * reconstruits quand l'API répond après le fallback) ; sinon aucune : une promo
+ * activée d'office donnait un libellé « RT · BUT1 » sans que rien ne soit choisi.
  */
 function fillPromoChips(container, promos) {
   const keep = (state.wanted && state.wanted.promo) || getSelectedPromo();
-  const activeIdx = Math.max(0, promos.indexOf(keep));
+  const activeIdx = promos.indexOf(keep);
 
   container.innerHTML = '';
   promos.forEach((p, i) => {
