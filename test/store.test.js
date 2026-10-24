@@ -168,6 +168,60 @@ test('get : une cle stale en echec recent ne relance pas FlOpEDT a chaque lectur
   } finally { store.CONFIG.refreshStatic = saved_static; restore(); }
 });
 
+test('get : une semaine passee n est jamais stale, une semaine entretenue l est (KF10089)', async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const saved_courses = store.CONFIG.refreshCourses;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    // Deuxieme semaine de juillet de l annee universitaire en cours : dans la
+    // fenetre a la demande, mais jamais dans weeksToMaintain (plus de 2 semaines passees)
+    const now = new Date();
+    const start_year = now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+    const july = new Date(Date.UTC(start_year, 6, 10));
+    july.setUTCDate(july.getUTCDate() + 4 - (july.getUTCDay() || 7));
+    const past_week = Math.ceil((((july - Date.UTC(july.getUTCFullYear(), 0, 1)) / 86400000) + 1) / 7);
+    const past = { dept: 'INFO', week: String(past_week), year: String(july.getUTCFullYear()) };
+    const maintained = store.weeksToMaintain(now)[0];
+    const current = { dept: 'INFO', week: String(maintained.week), year: String(maintained.year) };
+
+    await store.refresh(COURSES, store.validate(COURSES, past));
+    await store.refresh(COURSES, store.validate(COURSES, current));
+    store.CONFIG.refreshCourses = 1;
+    await sleep(5);
+
+    const calls_before = fakeUpstream.calls;
+    assert.equal((await store.get(COURSES, past)).status, 'hit', 'semaine passee servie sans etre stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before, 'aucun appel FlOpEDT pour une semaine passee');
+    assert.equal((await store.get(COURSES, current)).status, 'stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'la semaine entretenue est rafraichie');
+  } finally { store.CONFIG.refreshCourses = saved_courses; restore(); }
+});
+
+test('start : les fichiers d une annee universitaire passee sont supprimes au chargement (KF10089)', () => {
+  const fs = require('fs'), path = require('path');
+  const dir = store.CONFIG.dataDir;
+  fs.mkdirSync(dir, { recursive: true });
+  const old_key = 'fetch-scheduledcourses__dept=INFO&week=40&work_copy=0&year=2021';
+  const static_key = 'rooms-all__dept=INFO';
+  const write = (key, endpoint, params) => fs.writeFileSync(path.join(dir, `${key}.json`),
+    JSON.stringify({ key, endpoint, params, fetchedAt: new Date().toISOString(), body: [] }));
+  write(old_key, COURSES, { dept: 'INFO', week: 40, year: 2021, work_copy: 0 });
+  write(static_key, '/fr/api/rooms/all/', { dept: 'INFO' });
+  store.CONFIG.disableRefresh = true;
+  try {
+    store.start();
+    assert.equal(fs.existsSync(path.join(dir, `${old_key}.json`)), false, 'semaine de 2021 supprimee');
+    assert.equal(fs.existsSync(path.join(dir, `${static_key}.json`)), true, 'statique conserve');
+    assert.ok(store.entries('/fr/api/rooms/all/').some(e => e.key === static_key));
+    assert.ok(!store.entries(COURSES).some(e => e.key === old_key));
+  } finally { fs.rmSync(path.join(dir, `${static_key}.json`), { force: true }); fs.rmSync(path.join(dir, `${old_key}.json`), { force: true }); }
+});
+
 test('fetchUpstream : reponse tronquee apres les en-tetes -> rejet, file liberee (KF40055)', async () => {
   const restore = fakeUpstream((req, cb) => {
     const res = fakeResponse();

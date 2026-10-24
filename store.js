@@ -117,15 +117,30 @@ function fileOf(key) { return path.join(CONFIG.dataDir, `${key}.json`); }
 
 function loadFromDisk() {
   fs.mkdirSync(CONFIG.dataDir, { recursive: true });
-  let n = 0;
+  let n = 0, purged = 0;
   for (const f of fs.readdirSync(CONFIG.dataDir)) {
     if (!f.endsWith('.json') || f.startsWith('.')) continue;
     try {
       const e = JSON.parse(fs.readFileSync(path.join(CONFIG.dataDir, f), 'utf8'));
-      if (e && e.key && e.endpoint && e.body !== undefined) { mem.set(e.key, e); n++; }
+      if (!(e && e.key && e.endpoint && e.body !== undefined)) continue;
+      // Semaine d'une annee universitaire passee : plus jamais servie ni
+      // entretenue, le fichier ne ferait que grossir le store
+      if (isPastAcademicYear(e)) { fs.unlinkSync(path.join(CONFIG.dataDir, f)); purged++; continue; }
+      mem.set(e.key, e); n++;
     } catch (err) { warn(`fichier ignore ${f}: ${err.message}`); }
   }
-  log(`${n} entree(s) chargee(s) depuis ${CONFIG.dataDir}`);
+  log(`${n} entree(s) chargee(s) depuis ${CONFIG.dataDir}${purged ? `, ${purged} fichier(s) d'une annee universitaire passee supprime(s)` : ''}`);
+}
+
+function isPastAcademicYear(entry) {
+  if (ENDPOINTS[entry.endpoint]?.kind !== 'courses' || !entry.params) return false;
+  return !weekInWindow(Number(entry.params.year), Number(entry.params.week));
+}
+
+/** Une semaine est entretenue si elle fait partie de weeksToMaintain() ; le statique l'est toujours. */
+function isMaintained(endpoint, params, now = new Date()) {
+  if (ENDPOINTS[endpoint].kind !== 'courses') return true;
+  return weeksToMaintain(now).some(w => w.year === params.year && w.week === params.week);
 }
 
 function persist(entry) {
@@ -290,7 +305,9 @@ async function get(endpoint, query) {
   if (entry) {
     const age = Date.now() - Date.parse(entry.fetchedAt);
     let status = 'hit';
-    if (age > 2 * maxAgeOf(endpoint)) {
+    // Une semaine passee n'est plus entretenue : servie telle quelle, jamais
+    // stale (chaque lecture relancait sinon un appel FlOpEDT pour des cours finis)
+    if (age > 2 * maxAgeOf(endpoint) && isMaintained(endpoint, params)) {
       status = 'stale';
       // Meme garde que le chemin miss : apres un echec, pas de nouvel appel
       // FlOpEDT a chaque lecture tant que FAILURE_TTL_MS n'est pas ecoule
