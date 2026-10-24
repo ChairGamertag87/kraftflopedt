@@ -78,6 +78,16 @@ test('parseFeed : restaurant trouve, journees triees, CDATA et HTML echappe acce
   assert.equal(days[1].services[0].categories.length, 2);
 });
 
+test('parseFeed : l attribut id peut ne pas etre le premier (KF10093)', () => {
+  const xml = '<root><resto title="RU Blagnac" id="r674"><menu date="2026-09-30"><![CDATA[<h4>Plat</h4><ul><li>Riz</li></ul>]]></menu></resto>'
+    + '<resto title="x" id="r999"/></root>';
+  const { found, days } = crous.parseFeed(xml, 'r674');
+  assert.equal(found, true);
+  assert.deepEqual(days.map(d => d.date), ['2026-09-30']);
+  assert.deepEqual(crous.parseFeed(xml, 'r999'), { found: true, days: [] });
+  assert.deepEqual(crous.parseFeed(xml, 'r67'), { found: false, days: [] }, 'pas de correspondance partielle');
+});
+
 test('parseFeed : restaurant absent ou vide', () => {
   assert.deepEqual(crous.parseFeed(XML, 'r123'), { found: false, days: [] });
   assert.deepEqual(crous.parseFeed(XML, 'r999'), { found: true, days: [] });

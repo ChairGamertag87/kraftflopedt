@@ -203,7 +203,8 @@ function cleanText(s) {
 
 /** Extrait le bloc <resto id="rXXX">...</resto> du menu.xml (null si absent). */
 function extractResto(xml, restoId) {
-  const re = new RegExp(`<resto\\s+id="${restoId}"[^>]*?(/>|>)`, 'i');
+  // id n'est pas forcement le premier attribut de la balise
+  const re = new RegExp(`<resto\\b[^>]*?\\bid="${restoId}"[^>]*?(/>|>)`, 'i');
   const m  = re.exec(xml);
   if (!m) return null;
   if (m[1] === '/>') return '';
