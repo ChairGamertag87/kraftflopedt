@@ -147,6 +147,14 @@ const failedAt = new Map(); // key -> timestamp ms
 
 function fetchUpstream(endpoint, params) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let deadline;
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      fn(value);
+    };
     const req = https.request({
       hostname: FLOPEDT_HOST,
       path:     `${endpoint}?${queryString(params)}`,
@@ -163,21 +171,41 @@ function fetchUpstream(endpoint, params) {
       // caractere multi-octets (un "é" a cheval sur deux morceaux devenait U+FFFD)
       const chunks = [];
       res.on('data', d => chunks.push(d));
+      res.on('error', e => settle(reject, e));
+      // Connexion fermee avant la fin du corps (Content-Length non atteint, chunk
+      // final absent) : 'end' n'est jamais emis, sans ceci la promesse restait pendante
+      res.on('close', () => {
+        if (!res.complete) settle(reject, new Error(`Reponse tronquee sur ${endpoint}`));
+      });
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode} sur ${endpoint}`));
+          return settle(reject, new Error(`HTTP ${res.statusCode} sur ${endpoint}`));
         }
         let body;
         try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-        catch (e) { return reject(new Error(`JSON invalide sur ${endpoint}: ${e.message}`)); }
-        if (body === null || typeof body !== 'object') return reject(new Error(`Reponse inattendue sur ${endpoint}`));
-        resolve(body);
+        catch (e) { return settle(reject, new Error(`JSON invalide sur ${endpoint}: ${e.message}`)); }
+        if (body === null || typeof body !== 'object') return settle(reject, new Error(`Reponse inattendue sur ${endpoint}`));
+        settle(resolve, body);
       });
     });
+    // L'option timeout ne couvre que l'inactivite du socket : une reponse au
+    // goutte-a-goutte la contourne, d'ou une borne sur la duree totale de l'appel
+    deadline = setTimeout(() => req.destroy(new Error(`Duree maximale ${upstreamDeadlineMs()} ms depassee sur ${endpoint}`)), upstreamDeadlineMs());
+    deadline.unref();
     req.on('timeout', () => req.destroy(new Error(`Timeout ${CONFIG.upstreamTimeout} ms sur ${endpoint}`)));
-    req.on('error', reject);
+    req.on('error', e => settle(reject, e));
     req.end();
   });
+}
+
+/** Duree totale maximale d'un appel FlOpEDT (deux fois le delai d'inactivite). */
+function upstreamDeadlineMs() { return 2 * CONFIG.upstreamTimeout; }
+
+/** Rejette apres ms, pour ne jamais bloquer la file sur une promesse qui ne se regle pas. */
+function watchdog(ms, message) {
+  let timer;
+  const p = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); timer.unref(); });
+  return { promise: p, cancel: () => clearTimeout(timer) };
 }
 
 // File d'attente : les demandes "a la demande" passent devant le rafraichissement
@@ -199,8 +227,11 @@ async function drain() {
       if (wait > 0) await sleep(wait);
       lastCallAt = Date.now();
       upstream.calls++;
+      // Filet de securite : si l'appel ne se regle pas malgre ses propres delais,
+      // la file ne doit pas rester gelee (pending jamais purge, draining a true)
+      const guard = watchdog(upstreamDeadlineMs() + CONFIG.upstreamTimeout, `Appel FlOpEDT sans reponse sur ${job.endpoint}`);
       try {
-        const body  = await fetchUpstream(job.endpoint, job.params);
+        const body  = await Promise.race([fetchUpstream(job.endpoint, job.params), guard.promise]);
         const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: new Date().toISOString(), body };
         mem.set(job.key, entry);
         try { persist(entry); } catch (e) { warn(`ecriture impossible ${job.key}: ${e.message}`); }
@@ -214,6 +245,7 @@ async function drain() {
         upstream.lastErrorAt = new Date().toISOString();
         job.reject(e);
       } finally {
+        guard.cancel();
         pending.delete(job.key);
       }
     }

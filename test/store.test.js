@@ -93,3 +93,89 @@ test('ENDPOINTS : quatre endpoints FlOpEDT, rien d autre', () => {
     '/fr/api/groups/structural/tree/', '/fr/api/rooms/all/',
   ]);
 });
+
+// ── Appels FlOpEDT simules : https.request remplace par un faux serveur ──
+const https = require('https');
+const { EventEmitter } = require('events');
+
+/** Remplace https.request ; `scenario(req, cb)` joue la reponse. Renvoie la fonction de restauration. */
+function fakeUpstream(scenario) {
+  const original = https.request;
+  const original_gap = store.CONFIG.minGap;
+  store.CONFIG.minGap = 1;
+  https.request = (opts, cb) => {
+    fakeUpstream.calls++;
+    const req = new EventEmitter();
+    req.end = () => scenario(req, cb);
+    req.destroy = err => {
+      if (req.destroyed) return;
+      req.destroyed = true;
+      if (err) req.emit('error', err);
+      req.emit('close');
+    };
+    return req;
+  };
+  return () => { https.request = original; store.CONFIG.minGap = original_gap; };
+}
+fakeUpstream.calls = 0;
+
+/** La Map pending est privee : si elle est purgee, un nouveau refresh sur la meme cle declenche un nouvel appel. */
+async function assertPendingPurged(endpoint, query) {
+  const before = fakeUpstream.calls;
+  await store.refresh(endpoint, query).catch(() => {});
+  assert.equal(fakeUpstream.calls, before + 1, 'un nouvel appel part : la cle n est plus dans pending');
+}
+
+function fakeResponse(statusCode = 200) {
+  const res = new EventEmitter();
+  res.statusCode = statusCode;
+  res.complete = false;
+  return res;
+}
+
+test('fetchUpstream : une reponse complete est servie et la file est liberee', async () => {
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[{"ok":1}]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const entry = await store.refresh(TREE, { dept: 'INFO' });
+    assert.deepEqual(entry.body, [{ ok: 1 }]);
+    assert.equal(store.status().queue.inFlight, 0);
+  } finally { restore(); }
+});
+
+test('fetchUpstream : reponse tronquee apres les en-tetes -> rejet, file liberee (KF40055)', async () => {
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    // Content-Length jamais atteint : la connexion se ferme sans 'end'
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[{"a":')); res.emit('close'); });
+  });
+  try {
+    await assert.rejects(store.refresh(TREE, { dept: 'RT' }), /tronquee/);
+    assert.equal(store.status().queue.inFlight, 0, 'drain ne reste pas bloque');
+    await assertPendingPurged(TREE, { dept: 'RT' });
+  } finally { restore(); }
+});
+
+test('fetchUpstream : reponse au goutte-a-goutte -> borne sur la duree totale (KF40055)', async () => {
+  const saved = store.CONFIG.upstreamTimeout;
+  store.CONFIG.upstreamTimeout = 40; // duree totale max = 80 ms
+  let timer;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    const original_destroy = req.destroy;
+    req.destroy = err => { clearInterval(timer); original_destroy(err); };
+    setImmediate(() => {
+      cb(res);
+      // un octet toutes les 10 ms : jamais d'inactivite, jamais de fin
+      timer = setInterval(() => res.emit('data', Buffer.from('[')), 10);
+    });
+  });
+  try {
+    await assert.rejects(store.refresh(TREE, { dept: 'CS' }), /Duree maximale/);
+    assert.equal(store.status().queue.inFlight, 0);
+    clearInterval(timer);
+    await assertPendingPurged(TREE, { dept: 'CS' });
+  } finally { clearInterval(timer); store.CONFIG.upstreamTimeout = saved; restore(); }
+});
