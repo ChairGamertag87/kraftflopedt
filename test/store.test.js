@@ -222,6 +222,27 @@ test('start : les fichiers d une annee universitaire passee sont supprimes au ch
   } finally { fs.rmSync(path.join(dir, `${static_key}.json`), { force: true }); fs.rmSync(path.join(dir, `${old_key}.json`), { force: true }); }
 });
 
+test('refreshCourses : au demarrage, seules les semaines absentes ou perimees sont demandees (KF10088)', async () => {
+  const saved_depts = store.CONFIG.depts;
+  store.CONFIG.depts = ['INFO'];
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const total = store.weeksToMaintain().length;
+    let before = fakeUpstream.calls;
+    await store.refreshCourses({ only_outdated: true });
+    assert.ok(fakeUpstream.calls - before > 0, 'les semaines absentes sont demandees');
+    before = fakeUpstream.calls;
+    await store.refreshCourses({ only_outdated: true });
+    assert.equal(fakeUpstream.calls - before, 0, 'store a jour : aucun appel au demarrage');
+    before = fakeUpstream.calls;
+    await store.refreshCourses();
+    assert.equal(fakeUpstream.calls - before, total, 'la passe periodique reste complete');
+  } finally { store.CONFIG.depts = saved_depts; restore(); }
+});
+
 test('fetchUpstream : reponse tronquee apres les en-tetes -> rejet, file liberee (KF40055)', async () => {
   const restore = fakeUpstream((req, cb) => {
     const res = fakeResponse();

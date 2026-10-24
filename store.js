@@ -414,11 +414,23 @@ async function runJobs(name, jobs) {
   log(`rafraichissement ${name} termine : ${r.ok} ok, ${r.failed} echec(s), ${Math.round((Date.parse(r.finishedAt) - Date.parse(r.startedAt)) / 1000)} s`);
 }
 
-function refreshCourses() {
+/**
+ * @param {object}  [opts]
+ * @param {boolean} [opts.only_outdated]  ne met en file que les semaines absentes
+ *   ou plus vieilles que REFRESH_COURSES_MS (demarrage : le store est en general
+ *   a jour, une passe complete de ~160 appels pour rien ferait bannir l'IP en
+ *   cas de redemarrages en boucle)
+ */
+function refreshCourses({ only_outdated = false } = {}) {
   const jobs = [];
   for (const w of weeksToMaintain()) {
     for (const dept of CONFIG.depts) {
-      jobs.push({ endpoint: '/fr/api/fetch/scheduledcourses/', params: { dept, week: w.week, year: w.year, work_copy: 0 } });
+      const params = { dept, week: w.week, year: w.year, work_copy: 0 };
+      if (only_outdated) {
+        const entry = mem.get(keyOf('/fr/api/fetch/scheduledcourses/', params));
+        if (entry && Date.now() - Date.parse(entry.fetchedAt) <= CONFIG.refreshCourses) continue;
+      }
+      jobs.push({ endpoint: '/fr/api/fetch/scheduledcourses/', params });
     }
   }
   return runJobs('courses', jobs);
@@ -457,7 +469,7 @@ function start() {
   // puis les emplois du temps.
   (async () => {
     if (staticAge() > CONFIG.refreshStatic) await refreshStatic();
-    await refreshCourses();
+    await refreshCourses({ only_outdated: true });
   })().catch(e => warn(`rafraichissement initial : ${e.message}`));
 
   setInterval(() => refreshStatic().catch(() => {}),  CONFIG.refreshStatic).unref();
@@ -492,4 +504,4 @@ function status() {
   };
 }
 
-module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, start, status, weeksToMaintain, weekInWindow };
+module.exports = { ENDPOINTS, CONFIG, httpError, validate, get, entries, refresh, refreshCourses, start, status, weeksToMaintain, weekInWindow };
