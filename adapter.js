@@ -508,7 +508,7 @@ const ROUTES = {
   '/crous/menu':    async () => {
                       // Jours passes retires : le flux CNOUS garde parfois la semaine entiere
                       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-                      const out = await crous.getMenus();
+                      const out = await crous.getMenus(today);
                       return { ...out, days: (out.days || []).filter(d => d.date >= today) };
                     },
   '/':              () => ({

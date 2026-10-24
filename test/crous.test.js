@@ -84,6 +84,48 @@ test('parseFeed : restaurant absent ou vide', () => {
   assert.deepEqual(crous.parseFeed('', 'r674'), { found: false, days: [] });
 });
 
+test('getMenus : copie locale sans jour a venir et flux injoignable -> repli CROUStillant (KF20072)', async () => {
+  const fs = require('fs'), path = require('path'), http = require('http'), https = require('https');
+  const { EventEmitter } = require('events');
+  const dir = crous.CONFIG.dataDir;
+  fs.mkdirSync(dir, { recursive: true });
+  // copie locale du 1er octobre : le flux ne contient que des jours de septembre
+  fs.writeFileSync(path.join(dir, `menu-${crous.CONFIG.region}.xml`), XML);
+  fs.writeFileSync(path.join(dir, `menu-${crous.CONFIG.region}.meta.json`), JSON.stringify({ fetchedAt: '2026-10-01T00:00:00.000Z' }));
+  const orig_http = http.get, orig_https = https.get;
+  const fakeReq = () => { const req = new EventEmitter(); req.setTimeout = () => {}; return req; };
+  http.get = () => { const req = fakeReq(); setImmediate(() => req.emit('error', new Error('ENETUNREACH'))); return req; };
+  const fallback_paths = [];
+  https.get = (opts, cb) => {
+    fallback_paths.push(opts.path);
+    const req = fakeReq();
+    setImmediate(() => {
+      const res = new EventEmitter(); res.statusCode = 200; cb(res);
+      res.emit('data', Buffer.from(JSON.stringify({ data: { repas: [{ type: 'midi', categories: [{ libelle: 'Plat', plats: [{ libelle: 'Tartiflette' }] }] }] } })));
+      res.emit('end');
+    });
+    return req;
+  };
+  try {
+    crous.start();                                   // recharge la copie, le flux echoue
+    await new Promise(r => setTimeout(r, 30));
+    const out = await crous.getMenus('2026-10-24');
+    assert.equal(out.source, 'croustillant');
+    assert.ok(fallback_paths.length > 0, 'le repli a ete appele');
+    assert.ok(out.days.length > 0);
+    assert.equal(out.days[0].services[0].categories[0].plats[0], 'Tartiflette');
+    // avec un jour a venir dans la copie locale, pas de repli : derniere version servie
+    const before = fallback_paths.length;
+    const kept = await crous.getMenus('2026-09-30');
+    assert.equal(kept.source, 'cnous');
+    assert.equal(kept.stale, true);
+    assert.equal(fallback_paths.length, before);
+  } finally {
+    http.get = orig_http; https.get = orig_https;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('RESTAURANT et CONFIG : Blagnac, region toulouse', () => {
   assert.equal(crous.CONFIG.region, 'toulouse');
   assert.equal(crous.RESTAURANT.id, 'r674');

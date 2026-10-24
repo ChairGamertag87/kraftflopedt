@@ -395,11 +395,27 @@ async function fetchFallback() {
 //  API publique
 // ════════════════════════════════════════════════════
 
+/** Date du jour en heure de Paris (AAAA-MM-JJ), comme le filtre de l'adapter. */
+function parisToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+/** Repli CROUStillant : jamais d'exception, `error` renseigne si rien n'est obtenu. */
+async function fallbackMenus(err) {
+  let days = [];
+  try { days = await fetchFallback(); } catch (e) { err += ` ; repli : ${e.message}`; }
+  const result = { source: 'croustillant', fetchedAt: new Date().toISOString(), lastModified: null, stale: false, found: days.length > 0, days };
+  if (!days.length) result.error = `menus indisponibles (${err})`;
+  return result;
+}
+
 /**
  * Menus du restaurant : { restaurant, region, source, fetchedAt, stale, days: [...] }
  * Ne jette jamais pour une panne amont : `days` peut etre vide, `error` renseigne.
+ * @param {string} [today]  AAAA-MM-JJ : une copie locale sans aucun jour a partir
+ *   de cette date ne vaut rien, le repli est alors tente si le flux est injoignable
  */
-async function getMenus() {
+async function getMenus(today = parisToday()) {
   const fresh = await ensureFresh();
   let result;
 
@@ -414,13 +430,13 @@ async function getMenus() {
       days:      parsed.days,
     };
     if (!fresh.ok) result.error = `flux CNOUS injoignable, derniere version connue servie (${fresh.error})`;
+    // La copie locale est rechargee au demarrage : sans ce test le repli n'etait
+    // plus jamais tente apres le premier succes, meme avec des jours tous passes
+    const useful = parsed.found && parsed.days.some(d => d.date >= today);
+    if (!fresh.ok && !useful) result = await fallbackMenus(fresh.error);
   } else {
     // Aucune copie locale et flux injoignable : repli CROUStillant
-    let days = [];
-    let err  = fresh.error;
-    try { days = await fetchFallback(); } catch (e) { err += ` ; repli : ${e.message}`; }
-    result = { source: 'croustillant', fetchedAt: new Date().toISOString(), lastModified: null, stale: false, found: days.length > 0, days };
-    if (!days.length) result.error = `menus indisponibles (${err})`;
+    result = await fallbackMenus(fresh.error);
   }
 
   return { restaurant: RESTAURANT, region: CONFIG.region, ...result };
