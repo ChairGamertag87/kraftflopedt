@@ -148,6 +148,30 @@ test('fillPromoChips : aucune promo activee d office (KF30056)', () => {
   assert.deepEqual(container.children.map(c => c.className.includes('active')), [false, true, false]);
 });
 
+test('cacheLoad : une entree mal formee est supprimee et ignoree (KF20066)', () => {
+  for (const raw of ['{"ts":1,"courses":"x"}', '{"ts":1,"courses":{}}', '{"courses":[]}', 'null', '[]']) {
+    const removed = [];
+    const localStorage = { getItem: () => raw.replace('"ts":1', `"ts":${Date.now()}`), setItem() {}, removeItem: k => removed.push(k), key: () => null, length: 0 };
+    const a = loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage });
+    assert.equal(a.cacheLoad('INFO', 'BUT1', '1A', 40, 2026), null, raw);
+    assert.ok(removed.length === 1 || raw === 'null' || raw === '[]', `entree supprimee pour ${raw}`);
+  }
+  const ok = { getItem: () => JSON.stringify({ ts: Date.now(), courses: [] }), setItem() {}, removeItem() {}, key: () => null, length: 0 };
+  assert.deepEqual(plain(loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage: ok }).cacheLoad('INFO', 'BUT1', '1A', 40, 2026).courses), []);
+});
+
+test('cacheCleanup : le prefixe est versionne, les entrees de l ancien format sont purgees (KF20066)', () => {
+  const store = { 'edt-cache-INFO-BUT1-1A-S40-2026': '{"ts":1,"courses":[]}', 'edt-cache-v2-INFO-BUT1-1A-S40-2026': JSON.stringify({ ts: Date.now(), courses: [] }), 'edt-selection': '{}' };
+  const localStorage = {
+    getItem: k => store[k] ?? null, setItem(k, v) { store[k] = v; }, removeItem(k) { delete store[k]; },
+    key: i => Object.keys(store)[i] ?? null, get length() { return Object.keys(store).length; },
+  };
+  const a = loadFront(['config.js', 'utils.js', 'state.js', 'api.js'], { localStorage });
+  assert.match(a.cacheKey('INFO', 'BUT1', '1A', 40, 2026), /^edt-cache-v2-/);
+  a.cacheCleanup();
+  assert.deepEqual(Object.keys(store).sort(), ['edt-cache-v2-INFO-BUT1-1A-S40-2026', 'edt-selection']);
+});
+
 test('cacheKey : une cle par departement, promo, groupe et semaine', () => {
   const a = load();
   assert.notEqual(a.cacheKey('INFO', 'BUT1', '1A', 40, 2026), a.cacheKey('INFO', 'BUT2', '1A', 40, 2026));

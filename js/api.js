@@ -195,7 +195,10 @@ async function fetchSchedule(dept, promo, group) {
 //  Cache localStorage
 // ════════════════════════════
 
-const CACHE_PREFIX = 'edt-cache-';
+// Prefixe versionne : un changement de format du cache ne doit plus bloquer
+// les visiteurs qui ont une entree a l'ancien format pendant 7 jours
+const CACHE_PREFIX = 'edt-cache-v2-';
+const LEGACY_CACHE_PREFIX = 'edt-cache-';
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 function cacheKey(dept, promo, group, week, year) {
@@ -216,7 +219,9 @@ function cacheLoad(dept, promo, group, week, year) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (Date.now() - data.ts > CACHE_MAX_AGE) {
+    // Une entree mal formee (courses qui n'est pas un tableau) faisait planter
+    // buildGrid a chaque chargement tant qu'elle n'expirait pas
+    if (!data || typeof data.ts !== 'number' || !Array.isArray(data.courses) || Date.now() - data.ts > CACHE_MAX_AGE) {
       localStorage.removeItem(key);
       return null;
     }
@@ -224,11 +229,12 @@ function cacheLoad(dept, promo, group, week, year) {
   } catch (_) { return null; }
 }
 
-/** Supprime les entrées de cache expirées (> 7 jours). */
+/** Supprime les entrées de cache expirées (> 7 jours) et celles d'un ancien format. */
 function cacheCleanup() {
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const k = localStorage.key(i);
-    if (!k || !k.startsWith(CACHE_PREFIX)) continue;
+    if (!k || !k.startsWith(LEGACY_CACHE_PREFIX)) continue;
+    if (!k.startsWith(CACHE_PREFIX)) { localStorage.removeItem(k); continue; }
     try {
       const d = JSON.parse(localStorage.getItem(k));
       if (Date.now() - d.ts > CACHE_MAX_AGE) localStorage.removeItem(k);
@@ -266,7 +272,8 @@ async function loadSchedule() {
   const cached    = cacheLoad(dept, promo, group, week, year);
   const has_cache = !!(cached && Array.isArray(cached.courses));
   if (has_cache && cached.courses.length > 0) {
-    buildGrid(cached.courses);
+    // Une entree de cache inattendue ne doit pas empecher le chargement reseau
+    try { buildGrid(cached.courses); } catch (e) { console.warn('[EDT] cache local illisible :', e.message); showLoading(); }
   } else if (has_cache) {
     showEmptyWeek();
   } else {
