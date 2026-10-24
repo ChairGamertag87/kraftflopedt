@@ -38,9 +38,10 @@ const SELECTION_KEY = 'edt-selection';
 function readSavedSelection() {
   const params = new URLSearchParams(location.search);
   if (params.get('dept')) {
+    // Un lien tape a la main arrive souvent en minuscules (?dept=info&promo=but1)
     return {
-      dept:  params.get('dept'),
-      promo: params.get('promo') || '',
+      dept:  params.get('dept').toUpperCase(),
+      promo: (params.get('promo') || '').toUpperCase(),
       group: params.get('group') || '',
     };
   }
@@ -76,7 +77,7 @@ function saveSelection() {
 function activateChip(containerId, value) {
   let found = null;
   document.querySelectorAll(`#${containerId} .sel-chip`).forEach(b => {
-    const match = value !== '' && b.dataset.value === value;
+    const match = value !== '' && b.dataset.value.toUpperCase() === value.toUpperCase();
     b.classList.toggle('active', match);
     if (match) found = b;
   });
@@ -93,12 +94,24 @@ function restoreSelection() {
   const saved = readSavedSelection();
   if (!saved) return;
   if (!activateChip('dept-btns', saved.dept)) {
-    // Département inconnu : on garde le défaut (premier chip)
+    // Département inconnu : on garde le défaut (premier chip) et on le dit
     const first = document.querySelector('#dept-btns .sel-chip');
     if (first) first.classList.add('active');
+    rejectSavedSelection();
     return;
   }
   state.wanted = { promo: saved.promo || '', group: saved.group || '' };
+}
+
+/**
+ * Sélection mémorisée introuvable (lien erroné, groupe disparu) : une bannière
+ * au lieu d'un silence, et l'URL est nettoyée pour ne pas la rejouer.
+ */
+function rejectSavedSelection() {
+  if (new URLSearchParams(location.search).has('dept')) {
+    try { history.replaceState(null, '', location.pathname); } catch (_) { /* history indisponible */ }
+  }
+  showError('Sélection inconnue (département, promo ou groupe) : choisis ton groupe dans le sélecteur');
 }
 
 /**
@@ -229,6 +242,8 @@ async function loadGroupsFromAPI() {
     // Génère les chips de promo depuis l'arbre
     buildPromoChips();
     filterGroupsByPromo();
+    // L'arbre API fait foi : une promo ou un groupe toujours en attente n'existe pas
+    if (state.wanted && state.wanted.group) { state.wanted = null; rejectSavedSelection(); }
   } catch (e) {
     console.warn('[EDT] Impossible de charger les groupes :', e.message);
     if (getSelectedDept() !== dept) return;

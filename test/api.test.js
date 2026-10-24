@@ -25,14 +25,26 @@ function fakeDocument() {
     get innerHTML() { return this._html; },
     set innerHTML(v) { this._html = v; this.children = []; delete active[this.id]; },
   });
+  // _chips[conteneur] = chips statiques (data-value) renvoyes par querySelectorAll
+  const chips = {};
+  const chipsOf = sel => { const m = /^#([\w-]+) \.sel-chip$/.exec(sel); return m ? (chips[m[1]] || []) : []; };
   return {
-    _els: els, _active: active,
+    _els: els, _active: active, _chips: chips,
     getElementById: id => (els[id] = els[id] || el(id)),
-    querySelector: sel => { const m = /^#([\w-]+) \.sel-chip\.active$/.exec(sel); return m && active[m[1]] ? { dataset: { value: active[m[1]] } } : null; },
-    querySelectorAll: () => [],
+    querySelector: sel => {
+      const m = /^#([\w-]+) \.sel-chip\.active$/.exec(sel);
+      if (m) return active[m[1]] ? { dataset: { value: active[m[1]] } } : null;
+      return chipsOf(sel)[0] || null;
+    },
+    querySelectorAll: chipsOf,
     createElement: () => el(''),
   };
 }
+const chip = value => {
+  const c = { dataset: { value }, active: false };
+  c.classList = { toggle: (cls, on) => { c.active = on; }, add: () => { c.active = true; }, remove: () => { c.active = false; } };
+  return c;
+};
 function loadUi(fetchImpl, extra = {}) {
   const document = fakeDocument();
   const ctx = loadFront(['config.js', 'utils.js', 'state.js', 'ui.js', 'api.js', 'render.js'], { document, fetch: fetchImpl, ...extra });
@@ -170,6 +182,29 @@ test('cacheCleanup : le prefixe est versionne, les entrees de l ancien format so
   assert.match(a.cacheKey('INFO', 'BUT1', '1A', 40, 2026), /^edt-cache-v2-/);
   a.cacheCleanup();
   assert.deepEqual(Object.keys(store).sort(), ['edt-cache-v2-INFO-BUT1-1A-S40-2026', 'edt-selection']);
+});
+
+test('readSavedSelection et activateChip : parametres d URL insensibles a la casse (KF10085)', () => {
+  const { ctx, document } = loadUi(undefined, { URLSearchParams, location: { search: '?dept=info&promo=but1&group=1a', pathname: '/' } });
+  assert.deepEqual(plain(ctx.readSavedSelection()), { dept: 'INFO', promo: 'BUT1', group: '1a' });
+  document._chips['group-btns'] = [chip('1A'), chip('1B')];
+  const found = ctx.activateChip('group-btns', '1a');
+  assert.equal(found && found.dataset.value, '1A');
+  assert.deepEqual(document._chips['group-btns'].map(c => c.active), [true, false]);
+});
+
+test('restoreSelection : selection inconnue -> banniere et URL nettoyee (KF10085)', () => {
+  const replaced = [];
+  const { ctx, document } = loadUi(undefined, {
+    URLSearchParams,
+    location: { search: '?dept=ZZZ&promo=BUT1&group=1A', pathname: '/edt' },
+    history: { replaceState: (s, t, url) => replaced.push(url) },
+  });
+  document._chips['dept-btns'] = [chip('INFO'), chip('RT')];
+  ctx.restoreSelection();
+  assert.equal(document._chips['dept-btns'][0].active, true, 'le premier departement reste actif');
+  assert.match(document._els['error-banner'].textContent, /Sélection inconnue/);
+  assert.deepEqual(replaced, ['/edt']);
 });
 
 test('cacheKey : une cle par departement, promo, groupe et semaine', () => {
