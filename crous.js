@@ -241,6 +241,11 @@ function normaliseLibelle(s) {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
+// Avis de fermeture publie a la place des plats ("Structure fermee", "RU clos",
+// "Fermeture exceptionnelle") ; mots entiers seulement, "Poulet fermier" ou
+// "Closerie" ne doivent pas fermer le restaurant
+const CLOSED_RE = /\b(ferm(e|ee|é|ée|és|ées|eture)|clos)(?![a-zàâéèêëîïôùûüç])/i;
+
 function isNoise(plat) {
   if (!plat) return true;
   if (plat.startsWith('*')) return true;              // "*sous reserve de changement"
@@ -267,6 +272,9 @@ function parseMenuHtml(html) {
     } else if (mode === 'h4') {
       if (!service) { service = { moment: 'midi', categories: [] }; services.push(service); }
       category = { libelle: normaliseLibelle(text) || 'Menu', plats: [] };
+      // "Structure fermee du ... au ..." arrive comme un h4 sans plat : sans
+      // cette trace le jour disparaissait et le front annoncait un menu pas encore publie
+      if (CLOSED_RE.test(text)) category.notice = text;
       service.categories.push(category);
     } else if (mode === 'li') {
       if (!isNoise(text)) {
@@ -297,9 +305,15 @@ function parseMenuHtml(html) {
   }
   if (mode) { buf += html.slice(last); flush(); }
 
-  // Nettoyage : categories vides puis services vides supprimes
-  for (const s of services) s.categories = s.categories.filter(c => c.plats.length);
-  return services.filter(s => s.categories.length);
+  // Nettoyage : categories vides puis services vides supprimes ; un avis de
+  // fermeture sans plat remonte au service pour que la journee soit conservee
+  for (const s of services) {
+    const closed = s.categories.find(c => c.notice && !c.plats.length);
+    // seulement si rien n'est servi : un avis a cote de vrais plats ne ferme pas le service
+    if (closed && !s.categories.some(c => c.plats.length)) s.notice = closed.notice;
+    s.categories = s.categories.filter(c => c.plats.length).map(({ libelle, plats }) => ({ libelle, plats }));
+  }
+  return services.filter(s => s.categories.length || s.notice);
 }
 
 /** Toutes les journees publiees pour le restaurant, triees par date. */

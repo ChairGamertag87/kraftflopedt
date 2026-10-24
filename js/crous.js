@@ -126,6 +126,9 @@ function renderCrousDays() {
     if (day.services.length > 1 || svc.moment !== 'midi') {
       html += `<div class="crous-service-title">${CROUS_MOMENT_LABEL[svc.moment] || crousEscape(svc.moment)}</div>`;
     }
+    if (svc.notice) {
+      html += `<div class="crous-closed"><span class="sel-chip crous-closed-chip">Fermé</span>${crousEscape(svc.notice)}</div>`;
+    }
     for (const cat of svc.categories) {
       html += `<div class="crous-cat">
         <div class="rooms-building-name">${crousEscape(cat.libelle)}</div>

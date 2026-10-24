@@ -43,6 +43,28 @@ test('parseMenuHtml : plats sans service ni categorie rattaches a midi / Menu', 
   assert.deepEqual(crous.parseMenuHtml('<h2>midi</h2><h4>Entrees</h4>'), []);
 });
 
+test('parseMenuHtml : un avis de fermeture sans plat est conserve comme notice du service (KF30060)', () => {
+  const closed = '<h2>midi</h2><h4>Structure ferm&eacute;e du Lundi 26 Octobre 2026 au Vendredi 30 Octobre 2026</h4>';
+  assert.deepEqual(crous.parseMenuHtml(closed), [{
+    moment: 'midi', categories: [],
+    notice: 'Structure fermée du Lundi 26 Octobre 2026 au Vendredi 30 Octobre 2026',
+  }]);
+  // un service qui sert des plats ne porte jamais de notice, meme si un h4 matche
+  const open = crous.parseMenuHtml('<h2>midi</h2><h4>Plats clos</h4><ul><li>Lasagnes</li></ul><h4>Cafeteria ferm&eacute;e</h4>');
+  assert.deepEqual(open, [{ moment: 'midi', categories: [{ libelle: 'Plats clos', plats: ['Lasagnes'] }] }]);
+  // mots entiers seulement : un produit fermier dans une categorie vide n'est pas une fermeture
+  assert.deepEqual(crous.parseMenuHtml('<h2>midi</h2><h4>Poulet fermier</h4><ul></ul>'), []);
+  assert.deepEqual(crous.parseMenuHtml('<h4>La Closerie</h4>'), []);
+  assert.equal(crous.parseMenuHtml('<h4>Fermeture exceptionnelle</h4>')[0].notice, 'Fermeture exceptionnelle');
+  assert.equal(crous.parseMenuHtml('<h4>RU clos</h4>')[0].notice, 'RU clos');
+  // la journee fermee est gardee par parseFeed, triee avec les autres
+  const xml = `<root><resto id="r674"><menu date="2026-10-26"><![CDATA[${closed}]]></menu>` +
+    `<menu date="2026-10-23"><![CDATA[<h4>Plat</h4><ul><li>Poulet</li></ul>]]></menu></resto></root>`;
+  const { days } = crous.parseFeed(xml, 'r674');
+  assert.deepEqual(days.map(d => d.date), ['2026-10-23', '2026-10-26']);
+  assert.match(days[1].services[0].notice, /^Structure fermée/);
+});
+
 test('parseMenuHtml : entites numeriques hors plage ne plantent pas', () => {
   const s = crous.parseMenuHtml('<ul><li>Plat &#1114112; &#xD800; &#0; &#233;</li></ul>');
   assert.equal(s[0].categories[0].plats[0], 'Plat &#1114112; &#xD800; &#0; é');
