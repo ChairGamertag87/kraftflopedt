@@ -292,7 +292,11 @@ async function get(endpoint, query) {
     let status = 'hit';
     if (age > 2 * maxAgeOf(endpoint)) {
       status = 'stale';
-      if (!CONFIG.disableRefresh) refresh(endpoint, params, 5).catch(() => {});
+      // Meme garde que le chemin miss : apres un echec, pas de nouvel appel
+      // FlOpEDT a chaque lecture tant que FAILURE_TTL_MS n'est pas ecoule
+      const last_fail = failedAt.get(key);
+      const retry_ok  = !last_fail || Date.now() - last_fail >= CONFIG.failureTtl;
+      if (!CONFIG.disableRefresh && retry_ok) refresh(endpoint, params, 5).catch(() => {});
     }
     return { body: entry.body, fetchedAt: entry.fetchedAt, status };
   }

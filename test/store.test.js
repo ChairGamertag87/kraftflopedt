@@ -145,6 +145,29 @@ test('fetchUpstream : une reponse complete est servie et la file est liberee', a
   } finally { restore(); }
 });
 
+test('get : une cle stale en echec recent ne relance pas FlOpEDT a chaque lecture (KF20068)', async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const saved_static = store.CONFIG.refreshStatic;
+  let fail = false;
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse(fail ? 500 : 200);
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from('[]')); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    await store.refresh(TREE, { dept: 'GIM' });          // entree en store
+    store.CONFIG.refreshStatic = 1;                       // elle est aussitot stale
+    await sleep(5);
+    fail = true;
+    const calls_before = fakeUpstream.calls;
+    assert.equal((await store.get(TREE, { dept: 'GIM' })).status, 'stale');
+    await sleep(20);                                      // le refresh de fond echoue -> failedAt
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'premier rafraichissement tente');
+    for (let i = 0; i < 5; i++) assert.equal((await store.get(TREE, { dept: 'GIM' })).status, 'stale');
+    await sleep(20);
+    assert.equal(fakeUpstream.calls, calls_before + 1, 'pas de nouvel appel avant FAILURE_TTL_MS');
+  } finally { store.CONFIG.refreshStatic = saved_static; restore(); }
+});
+
 test('fetchUpstream : reponse tronquee apres les en-tetes -> rejet, file liberee (KF40055)', async () => {
   const restore = fakeUpstream((req, cb) => {
     const res = fakeResponse();
