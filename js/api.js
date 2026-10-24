@@ -260,10 +260,15 @@ async function loadSchedule() {
   // requete chargeait toute la promo et la mettait en cache sous une cle sans groupe
   if (!group) { showPrompt(); return; }
 
-  // Cache first: show cached data immediately if available
-  const cached = cacheLoad(dept, promo, group, week, year);
-  if (cached && cached.courses && cached.courses.length > 0) {
+  // Cache first: show cached data immediately if available. Un cache present
+  // mais vide (semaine de vacances) n'est pas un cache absent : hors ligne, il
+  // affichait "aucune copie locale n'existe" au lieu de "Aucun cours cette semaine"
+  const cached    = cacheLoad(dept, promo, group, week, year);
+  const has_cache = !!(cached && Array.isArray(cached.courses));
+  if (has_cache && cached.courses.length > 0) {
     buildGrid(cached.courses);
+  } else if (has_cache) {
+    showEmptyWeek();
   } else {
     showLoading();
   }
@@ -277,13 +282,7 @@ async function loadSchedule() {
     if (seq !== _loadSeq) return;
 
     if (courses.length === 0) {
-      _displayedCourses = [];
-      document.getElementById('schedule-container').innerHTML = `
-        <div class="state-box">
-          <span class="state-icon">📭</span>
-          Aucun cours cette semaine
-          <div class="state-sub">// semaine libre ou groupe sans cours</div>
-        </div>`;
+      showEmptyWeek();
     } else {
       buildGrid(courses);
     }
@@ -291,7 +290,7 @@ async function loadSchedule() {
     console.error('[EDT]', e);
     if (seq !== _loadSeq) return;
 
-    if (cached && cached.courses && cached.courses.length > 0) {
+    if (has_cache) {
       const age = Date.now() - cached.ts;
       const agoText = age < 3600000
         ? `${Math.round(age / 60000)} min`
@@ -299,6 +298,7 @@ async function loadSchedule() {
           ? `${Math.round(age / 3600000)}h`
           : `${Math.round(age / 86400000)}j`;
 
+      if (cached.courses.length === 0) showEmptyWeek();
       showError(`Hors-ligne — données du cache (${agoText})`);
     } else {
       showError(`Impossible de charger l'emploi du temps (${e.message})`);

@@ -20,6 +20,17 @@ function showPrompt() {
     </div>`;
 }
 
+/** Semaine sans aucun cours (vacances, groupe sans cours). */
+function showEmptyWeek() {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">📭</span>
+      Aucun cours cette semaine
+      <div class="state-sub">// semaine libre ou groupe sans cours</div>
+    </div>`;
+}
+
 /** Affiche l'état "chargement en cours". */
 function showLoading() {
   document.getElementById('schedule-container').innerHTML = `

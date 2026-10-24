@@ -33,9 +33,9 @@ function fakeDocument() {
     createElement: () => el(''),
   };
 }
-function loadUi(fetchImpl) {
+function loadUi(fetchImpl, extra = {}) {
   const document = fakeDocument();
-  const ctx = loadFront(['config.js', 'utils.js', 'state.js', 'ui.js', 'api.js', 'render.js'], { document, fetch: fetchImpl });
+  const ctx = loadFront(['config.js', 'utils.js', 'state.js', 'ui.js', 'api.js', 'render.js'], { document, fetch: fetchImpl, ...extra });
   return { ctx, document };
 }
 const okJson = body => async () => ({ ok: true, status: 200, json: async () => body });
@@ -124,6 +124,16 @@ test('selectDept et changeWeek : une reponse en vol n ecrase pas l invite (KF300
   document._els['schedule-container'].innerHTML = 'ancienne grille';
   ctx.changeWeek(1);
   assert.match(document._els['schedule-container'].innerHTML, /Sélectionne ta promo/);
+});
+
+test('loadSchedule : hors ligne, une semaine vide deja visitee n est pas "sans copie locale" (KF20065)', async () => {
+  const localStorage = { getItem: () => JSON.stringify({ ts: Date.now() - 60000, courses: [] }), setItem() {}, removeItem() {}, key: () => null, length: 0 };
+  const { ctx, document } = loadUi(async () => { throw new Error('Failed to fetch'); }, { localStorage });
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  assert.match(document._els['schedule-container'].innerHTML, /Aucun cours cette semaine/);
+  assert.doesNotMatch(document._els['schedule-container'].innerHTML, /aucune copie locale/);
+  assert.match(document._els['error-banner'].textContent, /Hors-ligne/);
 });
 
 test('fillPromoChips : aucune promo activee d office (KF30056)', () => {
