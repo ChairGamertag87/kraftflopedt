@@ -98,7 +98,9 @@ function renderCrousUnavailable() {
 }
 
 function renderCrousDays() {
-  const days      = (_crousData && _crousData.days) || [];
+  // Une reponse mise en cache la veille au soir contient encore le jour passe
+  const today     = crousTodayIso();
+  const days      = ((_crousData && _crousData.days) || []).filter(d => d.date >= today);
   const container = document.getElementById('crous-days');
   const result    = document.getElementById('crous-result');
   const meta      = document.getElementById('crous-meta');
