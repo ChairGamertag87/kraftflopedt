@@ -1,7 +1,9 @@
 # etat local du script de deploiement (voir auto-update.sh)
 .auto-update.lock
 .auto-update.deployed
+.auto-update.builder-prune
 auto-update.log
+auto-update.log.1
 
 # specifique a l hote (reseau du reverse proxy)
 docker-compose.override.yml

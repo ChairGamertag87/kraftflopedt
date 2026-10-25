@@ -4,7 +4,7 @@
 # location qui pose son propre Cache-Control. "always" : aussi sur les 404/5xx.
 #
 # CSP : le front n'appelle que le site lui-meme (/api/*, /ical/*), les polices
-# viennent de Google Fonts, les fonds et le favicon sont des data: URI.
+# viennent de Google Fonts, les fonds sont des data: URI (favicon : data: + fichiers du site).
 # 'unsafe-inline' sur script-src reste necessaire tant qu'index.html porte des
 # onclick= inline ; le retirer une fois les gestionnaires passes en addEventListener.
 add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;

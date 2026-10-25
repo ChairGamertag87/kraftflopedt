@@ -156,14 +156,20 @@ function updateWeekLabel() {
 }
 
 function changeWeek(delta) {
-  state.currentWeek += delta;
-  if (state.currentWeek < 1) {
-    state.currentYear--;
-    state.currentWeek = getISOWeeksInYear(state.currentYear); // 52 ou 53
-  } else if (state.currentWeek > getISOWeeksInYear(state.currentYear)) {
-    state.currentYear++;
-    state.currentWeek = 1;
+  let week = state.currentWeek + delta;
+  let year = state.currentYear;
+  if (week < 1) {
+    year--;
+    week = getISOWeeksInYear(year); // 52 ou 53
+  } else if (week > getISOWeeksInYear(year)) {
+    year++;
+    week = 1;
   }
+  // L'adapter refuse (404) toute semaine hors de l'année universitaire en cours :
+  // la navigation s'arrête aux bornes au lieu de reculer jusqu'en 2020
+  if (!isWeekInAcademicYear(week, year)) return;
+  state.currentWeek = week;
+  state.currentYear = year;
   updateWeekLabel();
   // Sans groupe, loadSchedule remet l'invite (et invalide une reponse en vol)
   loadSchedule();
@@ -225,19 +231,16 @@ function flattenTree(nodes, result = []) {
   return result;
 }
 
-const _treeCache = {};
-
 async function loadGroupsFromAPI() {
   const dept = getSelectedDept();
 
   try {
-    if (!_treeCache[dept]) {
-      _treeCache[dept] = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
-    }
+    // Promesse partagee avec l'EDT (api.js) : une seule requete d'arbre par departement
+    const tree = await fetchTree(dept);
     // Clic INFO puis vite RT : si l'arbre INFO arrive en dernier, il ne doit
     // pas remplacer les promos RT (le departement actif a change entre-temps)
     if (getSelectedDept() !== dept) return;
-    state.groupTree = _treeCache[dept];
+    state.groupTree = tree;
 
     // Génère les chips de promo depuis l'arbre
     buildPromoChips();

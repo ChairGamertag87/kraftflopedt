@@ -23,12 +23,14 @@
  *   node adapter.js              (port 3001 by default)
  *   PORT=8080 node adapter.js
  *
- * Example:
- *   curl "https://kraftflopedt.habibiserver.dev/courses?week=17&year=2026&dept=INFO&group=1A"
+ * Example (aucun port publie sur l'hote ; en prod, nginx ne relaie que
+ * /api/status, /api/crous/menu, /api/flopedt/* et /ical/*) :
+ *   docker exec kraftflopedt-adapter wget -qO- "http://127.0.0.1:3001/courses?week=17&year=2026&dept=INFO&group=1A"
  */
 
-const http  = require('http');
-const url   = require('url');
+const http   = require('http');
+const url    = require('url');
+const crypto = require('crypto');
 
 const PORT         = process.env.PORT || 3001;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
@@ -54,6 +56,18 @@ const DAY_MAP = { m: 'monday', tu: 'tuesday', w: 'wednesday', th: 'thursday', f:
 const DAY_INDEX = { m: 0, tu: 1, w: 2, th: 3, f: 4 };
 
 const DEFAULT_DURATIONS = { CM: 85, TD: 85, TP: 85, DS: 85, Projet: 85, QCM: 20, Conf: 90 };
+
+/**
+ * Duree d'un type de cours : contraintes du departement, puis suffixe numerique
+ * du type (TP240, TD120, CM90, X90 pour RT et GIM), puis valeurs par defaut, puis 85.
+ */
+function durationOf(type, durations) {
+  if (type && Object.hasOwn(durations, type) && Number.isFinite(durations[type])) return durations[type];
+  const suffix = /(\d+)$/.exec(type || '');
+  if (suffix) return Number(suffix[1]);
+  if (type && Object.hasOwn(DEFAULT_DURATIONS, type)) return DEFAULT_DURATIONS[type];
+  return 85;
+}
 
 function minutesToHHMM(m) {
   const h  = Math.floor(m / 60);
@@ -109,7 +123,10 @@ async function fetchDurations(dept) {
   try {
     const data = await flopFetch('/fr/api/fetch/constraints/', { dept });
     const map  = {};
-    for (const [type, val] of Object.entries(data)) map[type] = val.duration;
+    // Une entree nulle ne doit pas faire perdre toute la table
+    for (const [type, val] of Object.entries(data)) {
+      if (Number.isFinite(val?.duration)) map[type] = val.duration;
+    }
     return map;
   } catch { return DEFAULT_DURATIONS; }
 }
@@ -118,7 +135,8 @@ function isGroupVisible(courseGroup, selectedGroup, ancestorMap) {
   if (!selectedGroup) return true;
   if (!courseGroup)   return true;
   if (courseGroup === selectedGroup) return true;
-  return (ancestorMap[selectedGroup] || []).includes(courseGroup);
+  // Object.hasOwn : "constructor" est une cle heritee de {} et n'a pas de includes
+  return (Object.hasOwn(ancestorMap, selectedGroup) ? ancestorMap[selectedGroup] : []).includes(courseGroup);
 }
 
 /**
@@ -129,7 +147,7 @@ function normalizeCourse(c, durations) {
   const module = course.module || {};
   const groups = course.groups || [];
   const startMin = c.start_time ?? 480;
-  const duration = durations[course.type] ?? 85;
+  const duration = durationOf(course.type, durations);
   const endMin   = startMin + duration;
 
   return {
@@ -147,6 +165,8 @@ function normalizeCourse(c, durations) {
     duration,
     room:      c.room?.name || null,
     tutor:     c.tutor || null,
+    // FlOpEDT : supp_tutor = [{ username }] (parfois des chaines)
+    suppTutors: (course.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username)).filter(Boolean),
     groups:    groups.map(g => g.name),
     promo:     groups[0]?.train_prog || null,
     color:     module.display?.color_bg  || null,
@@ -170,6 +190,11 @@ async function getCourses({ week, year, dept, promo, group }) {
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
+
+  // Une table vide signifie un arbre indisponible, pas un groupe inconnu
+  if (group && Object.keys(ancestorMap).length && !Object.hasOwn(ancestorMap, group)) {
+    throw store.httpError(400, `Unknown group "${group}" for ${dept}${promo ? '/' + promo : ''}`);
+  }
 
   return list
     .map(c => normalizeCourse(c, durations))
@@ -199,8 +224,16 @@ async function getGroupTree({ dept }) {
 }
 
 async function getFreeRooms({ week, year, dept, day, start, end }) {
-  if (!week || !year || !dept || !day || !start || !end) {
+  if (!week || !year || !dept || !day || start == null || end == null || start === '' || end === '') {
     throw store.httpError(400, 'Required parameters: week, year, dept, day, start, end');
+  }
+  const start_num = Number(start);
+  const end_num   = Number(end);
+  if (!Number.isInteger(start_num) || !Number.isInteger(end_num) || start_num < 0 || start_num >= end_num) {
+    throw store.httpError(400, 'start and end must be integers (minutes since midnight) with start < end');
+  }
+  if (!Object.hasOwn(DAY_INDEX, day)) {
+    throw store.httpError(400, `day must be one of: ${Object.keys(DAY_INDEX).join(', ')}`);
   }
 
   const [raw, durations] = await Promise.all([
@@ -209,8 +242,8 @@ async function getFreeRooms({ week, year, dept, day, start, end }) {
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
-  const startNum = Number(start);
-  const endNum   = Number(end);
+  const startNum = start_num;
+  const endNum   = end_num;
 
   // Rooms busy during the requested time slot
   const busy = new Set();
@@ -222,7 +255,7 @@ async function getFreeRooms({ week, year, dept, day, start, end }) {
     if (c.day !== day || !roomName) continue;
 
     const cStart = c.start_time ?? 0;
-    const cEnd   = cStart + (durations[c.course?.type] ?? 85);
+    const cEnd   = cStart + durationOf(c.course?.type, durations);
 
     // Overlap check
     if (cStart < endNum && cEnd > startNum) busy.add(roomName);
@@ -253,12 +286,14 @@ const OPENAPI_SPEC = {
     description: 'A clean REST adapter that wraps the messy FlOpEDT API (IUT Blagnac).\n\n'
                + 'Returns flat, predictable JSON. Built with vanilla Node.js, zero dependencies.\n\n'
                + 'All data is served from a local store refreshed in the background '
-               + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.',
+               + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.\n\n'
+               + 'Public exposure (https://kraftflopedt.fr, through nginx): only /api/status (-> /status), '
+               + '/api/crous/menu (-> /crous/menu), /api/flopedt/* and /ical/*. The other routes are reachable '
+               + 'from the project Docker network only (docker exec kraftflopedt-adapter wget -qO- http://127.0.0.1:3001/...).',
     contact: { name: 'Clément Herrard', url: 'https://chairgamertag87.fr' },
   },
   servers: [
-    { url: 'https://kraftflopedt.habibiserver.dev', description: 'Local dev' },
-    { url: 'https://habibiserver.dev', description: 'Production' },
+    { url: 'http://kraftflopedt-adapter:3001', description: 'Docker network of the project only (no host port)' },
   ],
   tags: [
     { name: 'Schedule', description: 'Course schedules' },
@@ -284,7 +319,9 @@ const OPENAPI_SPEC = {
             description: 'List of normalized courses',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CourseListResponse' } } },
           },
-          400: { description: 'Missing required parameter', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          400: { description: 'Missing, invalid or repeated parameter, unknown department or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Week outside the current academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -297,6 +334,8 @@ const OPENAPI_SPEC = {
         ],
         responses: {
           200: { description: 'Group tree (raw + flattened)', content: { 'application/json': { schema: { $ref: '#/components/schemas/GroupTreeResponse' } } } },
+          400: { description: 'Unknown department or repeated parameter', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -314,6 +353,9 @@ const OPENAPI_SPEC = {
         ],
         responses: {
           200: { description: 'Free / busy rooms', content: { 'application/json': { schema: { $ref: '#/components/schemas/FreeRoomsResponse' } } } },
+          400: { description: 'Missing or invalid parameter (day, start, end), unknown department', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Week outside the current academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -338,6 +380,78 @@ const OPENAPI_SPEC = {
         },
       },
     },
+    '/status': {
+      get: {
+        tags: ['Utility'],
+        summary: 'Store and CROUS cache state (public as /api/status)',
+        responses: {
+          200: { description: 'Never cached', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
+        },
+      },
+    },
+    '/ical/{dept}/{promo}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a promo (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'promo', in: 'path', required: true, schema: { type: 'string' }, example: 'BUT1' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed, promo or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/ical/{dept}/{promo}/{group}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a group (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'promo', in: 'path', required: true, schema: { type: 'string' }, example: 'BUT1' },
+          { name: 'group', in: 'path', required: true, schema: { type: 'string' }, example: '1A' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed, promo or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/ical/prof/{dept}/{tutor}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a teacher (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'tutor', in: 'path', required: true, schema: { type: 'string' }, example: 'NEK' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api/flopedt/{endpoint}': {
+      get: {
+        tags: ['Utility'],
+        summary: 'Raw FlOpEDT endpoint served from the local store (used by the front)',
+        description: 'Allowed endpoints: fr/api/fetch/scheduledcourses/, fr/api/fetch/constraints/, fr/api/groups/structural/tree/, fr/api/rooms/all/. '
+                   + 'Query parameters are validated by the store (dept whitelist, week/year integers, no repeated parameter).',
+        parameters: [
+          { name: 'endpoint', in: 'path', required: true, schema: { type: 'string' }, example: 'fr/api/fetch/scheduledcourses/' },
+        ],
+        responses: {
+          200: { description: 'FlOpEDT JSON body, with X-Cache and X-Data-Fetched-At headers', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
+          400: { description: 'Parameter rejected by the store', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Endpoint not allowed or week outside the academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
   },
   components: {
     schemas: {
@@ -358,6 +472,7 @@ const OPENAPI_SPEC = {
           duration:  { type: 'integer', example: 85 },
           room:      { type: 'string',  nullable: true, example: 'B009' },
           tutor:     { type: 'string',  nullable: true, example: 'NEK' },
+          suppTutors: { type: 'array', items: { type: 'string' }, description: 'Co-enseignants (supp_tutor FlOpEDT)', example: ['MDM'] },
           groups:    { type: 'array',   items: { type: 'string' }, example: ['1A'] },
           promo:     { type: 'string',  nullable: true, example: 'BUT1' },
           color:     { type: 'string',  nullable: true, example: '#af3014' },
@@ -479,7 +594,7 @@ const DOCS_HTML = `<!doctype html>
     };
     document.getElementById('api-reference').dataset.configuration = JSON.stringify(configuration);
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.3"></script>
 </body>
 </html>`;
 
@@ -513,7 +628,7 @@ const ROUTES = {
                     },
   '/':              () => ({
     name: 'KraftFlopEDT Adapter',
-    version: '1.0',
+    version: OPENAPI_SPEC.info.version,
     docs: '/docs',
     openapi: '/openapi.json',
     endpoints: [
@@ -522,6 +637,9 @@ const ROUTES = {
       'GET /free-rooms?week=9&year=2026&dept=INFO&day=m&start=480&end=565',
       'GET /current-week',
       'GET /crous/menu',
+      'GET /status',
+      'GET /ical/<dept>/<promo>[/<groupe>].ics, GET /ical/prof/<dept>/<initiales>.ics',
+      `GET ${RAW_PREFIX}/<endpoint FlOpEDT>`,
     ],
   }),
 };
@@ -538,19 +656,15 @@ function send(res, status, payload, cacheControl) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Accept',
-    });
-    return res.end();
-  }
-  if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' });
+  // HEAD : Node n'ecrit pas le corps pour cette methode, les routes restent inchangees.
+  // OPTIONS n'arrive jamais ici (nginx le refuse en amont), le code dedie a ete retire.
+  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' });
 
   const parsed = url.parse(req.url, true);
 
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  // Le healthcheck (wget busybox sur /status toutes les 60 s) n'est pas journalise
+  const is_healthcheck = parsed.pathname === '/status' && /^Wget/.test(req.headers['user-agent'] || '');
+  if (!is_healthcheck) console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
 
   // Documentation routes (HTML + raw OpenAPI spec)
   if (parsed.pathname === '/docs') {
@@ -594,15 +708,31 @@ const server = http.createServer(async (req, res) => {
     if (!sel) return send(res, 404, { error: 'Flux iCal inconnu. Formes : /ical/<dept>/<promo>.ics, /ical/<dept>/<promo>/<groupe>.ics, /ical/prof/<dept>/<initiales>.ics' });
     try {
       const out = await ical.build(sel);
-      if (!out) return send(res, 404, { error: 'Promo ou groupe inconnu pour ce departement', ...sel });
-      const fname = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_');
-      res.writeHead(200, {
-        'Content-Type':                'text/calendar; charset=utf-8',
-        'Content-Disposition':         `inline; filename="${fname}.ics"`,
+      if (!out) return send(res, 404, { error: sel.tutor ? 'Enseignant inconnu pour ce departement (initiales FlOpEDT, tutor ou co-enseignant)' : 'Promo ou groupe inconnu pour ce departement', ...sel });
+      const raw_name = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-');
+      const fname    = raw_name.replace(/[^\w.-]+/g, '_');   // repli ASCII (RFC 6266)
+      // filename* RFC 5987 : encodeURIComponent laisse passer '()* qui n'y sont pas admis
+      const fname_utf8 = encodeURIComponent(`${raw_name}.ics`).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+      const etag          = `"${crypto.createHash('sha1').update(out.ics).digest('base64url')}"`;
+      const last_modified = new Date(out.lastModified);
+      last_modified.setUTCMilliseconds(0); // If-Modified-Since est a la seconde
+      const headers = {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control':               'public, max-age=600',
-        'Last-Modified':               new Date(out.lastModified).toUTCString(),
+        'ETag':                        etag,
+        'Last-Modified':               last_modified.toUTCString(),
         'X-Event-Count':               String(out.count),
+      };
+      const if_none_match     = req.headers['if-none-match'];
+      const if_modified_since = Date.parse(req.headers['if-modified-since'] || '');
+      const not_modified = if_none_match
+        ? if_none_match.split(',').some(t => t.trim() === etag || t.trim() === 'W/' + etag)
+        : (Number.isFinite(if_modified_since) && last_modified.getTime() <= if_modified_since);
+      if (not_modified) { res.writeHead(304, headers); return res.end(); }
+      res.writeHead(200, {
+        ...headers,
+        'Content-Type':                'text/calendar; charset=utf-8',
+        'Content-Disposition':         `inline; filename="${fname}.ics"; filename*=UTF-8''${fname_utf8}`,
       });
       return res.end(out.ics);
     } catch (e) {
@@ -613,6 +743,11 @@ const server = http.createServer(async (req, res) => {
 
   const handler = ROUTES[parsed.pathname];
   if (!handler) return send(res, 404, { error: 'Unknown route', path: parsed.pathname });
+
+  // url.parse rend un tableau pour un parametre repete : les filtres compareraient
+  // une chaine a un tableau et repondraient 200 avec une liste vide
+  const repeated = Object.keys(parsed.query).filter(k => Array.isArray(parsed.query[k]));
+  if (repeated.length) return send(res, 400, { error: `Repeated query parameter: ${repeated.join(', ')}` });
 
   try {
     const data = await handler(parsed.query);
@@ -627,13 +762,12 @@ store.start();
 crous.start();
 
 server.listen(PORT, () => {
-  console.log(`\n  KraftFlopEDT Adapter → https://kraftflopedt.habibiserver.dev`);
-  console.log(`  Docs                 → https://kraftflopedt.habibiserver.dev/docs`);
+  console.log(`\n  KraftFlopEDT Adapter listening on http://127.0.0.1:${PORT}`);
+  console.log(`  Docs: http://127.0.0.1:${PORT}/docs`);
   console.log(`  Source: https://${FLOPEDT_HOST}\n`);
   console.log('  Endpoints:');
   for (const r of Object.keys(ROUTES).filter(r => r !== '/')) console.log(`    GET ${r}`);
   console.log(`    GET /status`);
-  console.log(`    GET /crous/menu`);
   console.log(`    GET ${RAW_PREFIX}<endpoint FlOpEDT>  (${Object.keys(store.ENDPOINTS).length} endpoints)`);
   console.log('');
 });

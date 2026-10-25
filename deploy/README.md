@@ -9,7 +9,7 @@ architecture (nginx hote + PM2 + `/flopedt/` relaye vers FlOpEDT) n'existe plus.
 | Service                | Image                | Role                                                              | Port hote        |
 | ---------------------- | -------------------- | ----------------------------------------------------------------- | ---------------- |
 | `kraftflopedt-web`     | `Dockerfile.web`     | nginx : site statique + relais `/api/*`, `/ical/*` vers l'adapter | `127.0.0.1:8093` |
-| `kraftflopedt-adapter` | `Dockerfile.adapter` | `adapter.js` : store FlOpEDT, iCal, menus CROUS                   | `127.0.0.1:8094` |
+| `kraftflopedt-adapter` | `Dockerfile.adapter` | `adapter.js` : store FlOpEDT, iCal, menus CROUS                   | aucun (reseau `default` seulement) |
 
 Les donnees de l'adapter vivent dans le volume `kraftflopedt-adapter-data`
 (`/data`) : elles survivent aux redeploiements. Reglages (departements, periodes
@@ -19,15 +19,19 @@ de rafraichissement, garde-fous) : variables d'environnement dans
 ## Reverse proxy
 
 Le fichier `docker-compose.override.yml` (non versionne, specifique a l'hote)
-branche les deux conteneurs sur le reseau du reverse proxy :
+branche le conteneur web sur le reseau du reverse proxy. L'adapter reste sur le
+reseau `default` du projet : seul nginx lui parle, les autres conteneurs du
+reseau partage et les processus de l'hote ne l'atteignent pas.
 
 ```yaml
 services:
-  kraftflopedt-web:     { networks: [default, figutab_default] }
-  kraftflopedt-adapter: { networks: [default, figutab_default] }
+  kraftflopedt-web: { networks: [default, figutab_default] }
 networks:
   figutab_default: { external: true }
 ```
+
+Etat de l'adapter depuis l'hote : `curl -s https://kraftflopedt.fr/api/status` ou
+`docker exec kraftflopedt-adapter wget -qO- http://127.0.0.1:3001/status`.
 
 Cote Caddy, un bloc pour `kraftflopedt.fr` fait `reverse_proxy kraftflopedt-web:80`
 (les anciens hotes `www.` et `kraftflopedt.habibiserver.dev` redirigent en 301

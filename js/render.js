@@ -57,6 +57,17 @@ function showUnavailable() {
     </div>`;
 }
 
+/** Refus de l'adapter (4xx) : la demande ne peut pas aboutir, pas de bouton Réessayer. */
+function showRejected(reason) {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">🚫</span>
+      Semaine indisponible
+      <div class="state-sub">// ${escapeHtml(reason)}</div>
+    </div>`;
+}
+
 /**
  * Affiche un message d'erreur dans la bannière.
  * @param {string} msg
@@ -132,7 +143,7 @@ function buildGrid(courses) {
     html += `
       <div class="day-header${isToday ? ' today' : ''}" data-day="${d}">
         ${DAYS[d]}
-        <span>${date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
+        <span>${formatDayHeader(date)}</span>
       </div>`;
   }
 
@@ -206,9 +217,12 @@ function buildGrid(courses) {
           ${c.tutor !== '—' ? `<div class="course-meta course-tutor">👤 ${escapeHtml(c.tutor)}</div>` : ''}`;
       }
 
+      // tabindex + role : la carte se prend au clavier (Entree/Espace dans main.js) ;
+      // un lecteur d'ecran annonce type, module, horaire et salle
+      const label = `${typeLabel(c.type)} ${c.abbrev || c.name}, ${timeStr}${c.room !== '—' ? `, salle ${c.room}` : ''}`;
       html += `
         <div class="course-card type-${c.type}${style.includes('--accent') ? ' has-accent' : ''}"
-          style="${style}"
+          style="${style}" tabindex="0" role="button" aria-label="${escapeHtml(label)}"
           onclick="showDetail(_displayedCourses[${idx}])">
           ${innerHtml}
         </div>`;

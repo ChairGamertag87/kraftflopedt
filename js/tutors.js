@@ -16,6 +16,7 @@ let _tutorFilter   = '';         // texte tapé dans la recherche
 function openTutors() {
   document.getElementById('tutors-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  showModalWeek('tutors-week');
 
   if (_tutorSelected === null) {
     try { _tutorSelected = localStorage.getItem(TUTOR_KEY) || null; } catch (_) { /* ignore */ }
@@ -103,7 +104,13 @@ async function selectTutor(name) {
   document.querySelectorAll('#tutors-list .sel-chip').forEach(b =>
     b.classList.toggle('active', b.dataset.value === name));
 
-  const courses = await ensureWeekCourses();
+  let courses;
+  try {
+    courses = await ensureWeekCourses();
+  } catch (e) {
+    document.getElementById('tutors-result').innerHTML = `<div class="rooms-hint">Erreur : ${escapeHtml(e.message)}</div>`;
+    return;
+  }
   renderTutorSchedule(name, courses);
 }
 
@@ -175,7 +182,7 @@ function renderTutorSchedule(name, courses) {
     const isToday = isThisWeek && d === todayDow;
 
     html += `<div class="tutors-day${isToday ? ' today' : ''}">
-      <div class="rooms-building-name">${DAYS[d]} <span style="font-family:Inconsolata,monospace;font-size:0.78rem;font-weight:400;">${date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span></div>`;
+      <div class="rooms-building-name">${DAYS[d]} <span style="font-family:Inconsolata,monospace;font-size:0.78rem;font-weight:400;">${formatDayHeader(date)}</span></div>`;
 
     daySlots.forEach(c => {
       const isCurrent = current === c;

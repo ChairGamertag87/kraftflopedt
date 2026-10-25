@@ -42,7 +42,27 @@ function getWeekDates(week, year) {
   const fri = new Date(mon);
   fri.setDate(mon.getDate() + 4);
   const fmt = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  return { mon, fri, label: `S${week} — ${fmt(mon)} au ${fmt(fri)}` };
+  // L'année est toujours affichée : S1 ou une semaine d'une autre année n'en disaient rien
+  const fmt_year = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  return { mon, fri, label: `S${week} — ${fmt(mon)} au ${fmt_year(fri)}` };
+}
+
+/** Date courte d'une colonne (jour + mois), avec l'année quand elle n'est pas celle du jour. */
+function formatDayHeader(d, now = new Date()) {
+  const opts = { day: '2-digit', month: 'short' };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('fr-FR', opts);
+}
+
+/**
+ * Fenêtre servie par l'adapter (store.js, weekInWindow) : du 1er juillet qui
+ * précède l'année universitaire en cours (bascule le 20 juillet) au 31 août
+ * suivant. Toute autre semaine est refusée en 404.
+ */
+function isWeekInAcademicYear(week, year, now = new Date()) {
+  const start_year = now > new Date(now.getFullYear(), 6, 20) ? now.getFullYear() : now.getFullYear() - 1;
+  const mon = getWeekDates(week, year).mon.getTime();
+  return mon >= new Date(start_year, 6, 1).getTime() && mon <= new Date(start_year + 1, 7, 31).getTime();
 }
 
 /**

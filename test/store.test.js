@@ -80,6 +80,19 @@ test('weeksToMaintain : entre le 21 et le 31 juillet on bascule sur l annee suiv
   assert.ok(weeks.length > 40);
 });
 
+test('weekInWindow et weeksToMaintain : meme bascule du 20 juillet (KF10087)', () => {
+  const now = new Date('2027-07-25T08:00:00Z');
+  const ids = store.weeksToMaintain(now).map(w => `${w.year}-${w.week}`);
+  assert.ok(ids.includes('2027-36'));
+  assert.equal(store.weekInWindow(2027, 36, now), true, 'une semaine entretenue est dans la fenetre');
+  assert.equal(store.weekInWindow(2028, 35, now), true);
+  assert.equal(store.weekInWindow(2026, 40, now), false, 'l annee precedente est sortie');
+  // Le 19 juillet on est encore sur 2026-2027
+  const before = new Date('2027-07-19T08:00:00Z');
+  assert.equal(store.weekInWindow(2026, 40, before), true);
+  assert.equal(store.weekInWindow(2027, 36, before), false);
+});
+
 test('weeksToMaintain : autour du 1er janvier, S53 de 2026 puis S1 de 2027', () => {
   const ids = store.weeksToMaintain(new Date('2026-12-30T08:00:00Z')).map(w => `${w.year}-${w.week}`);
   assert.equal(ids[0], '2026-53');
@@ -166,6 +179,25 @@ test('get : une cle stale en echec recent ne relance pas FlOpEDT a chaque lectur
     await sleep(20);
     assert.equal(fakeUpstream.calls, calls_before + 1, 'pas de nouvel appel avant FAILURE_TTL_MS');
   } finally { store.CONFIG.refreshStatic = saved_static; restore(); }
+});
+
+test('refresh : changedAt ne bouge que si le corps change (KF20073)', async () => {
+  let body = '[{"id":1}]';
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from(body)); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const first = await store.refresh(TREE, { dept: 'CS' });
+    assert.equal(first.changedAt, first.fetchedAt);
+    await new Promise(r => setTimeout(r, 5));
+    const second = await store.refresh(TREE, { dept: 'CS' });
+    assert.notEqual(second.fetchedAt, first.fetchedAt);
+    assert.equal(second.changedAt, first.changedAt, 'meme corps : date de changement conservee');
+    body = '[{"id":2}]';
+    const third = await store.refresh(TREE, { dept: 'CS' });
+    assert.equal(third.changedAt, third.fetchedAt, 'corps different : nouvelle date');
+  } finally { restore(); }
 });
 
 test('get : une semaine passee n est jamais stale, une semaine entretenue l est (KF10089)', async () => {

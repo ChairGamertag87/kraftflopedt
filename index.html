@@ -38,7 +38,10 @@
   }
   </script>
 
-  <!-- Favicon -->
+  <!-- Favicon : favicon.ico et apple-touch-icon.png sont rasterises depuis le SVG ci-dessous
+       (navigateurs anciens, iOS, et plus de 404 sur /favicon.ico) -->
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='6' fill='%23a07840'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Georgia,serif' font-size='30' font-weight='700' fill='%23fdf8f0'%3EEDT%3C/text%3E%3C/svg%3E">
 
   <!-- Google Fonts -->
@@ -138,6 +141,11 @@
           <div class="legend-dot" style="background: rgba(155,42,42,0.7)"></div>
           <span class="legend-label">Examen</span>
         </div>
+        <!-- « Autre » : types FlOpEDT non classes par detectType (utils.js) : Conf, X90 hors SAE (GIM)... -->
+        <div class="legend-item" title="Types non classés : Conf, X90 hors SAE (GIM)…">
+          <div class="legend-dot" style="background: rgba(96,64,160,0.7)"></div>
+          <span class="legend-label">Autre</span>
+        </div>
       </div>
 
       <!-- Bannière d'erreur -->
@@ -150,7 +158,7 @@
     <div id="selector-overlay" class="selector-overlay" onclick="closeSelectorOutside(event)">
       <div class="selector-panel card">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeSelector()">✕</button>
+        <button class="detail-close" onclick="closeSelector()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">Département</div>
@@ -184,10 +192,10 @@
     <div id="rooms-overlay" class="selector-overlay" onclick="closeRoomsOutside(event)">
       <div class="selector-panel card" style="max-width:520px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeRooms()">✕</button>
+        <button class="detail-close" onclick="closeRooms()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title">🚪 Salles libres</div>
+          <div class="selector-section-title">🚪 Salles libres <span class="modal-week" id="rooms-week"></span></div>
         </div>
 
         <div class="selector-section">
@@ -215,10 +223,10 @@
     <div id="tutors-overlay" class="selector-overlay" onclick="closeTutorsOutside(event)">
       <div class="selector-panel card" style="max-width:560px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeTutors()">✕</button>
+        <button class="detail-close" onclick="closeTutors()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title">🔍 Où est le prof ?</div>
+          <div class="selector-section-title">🔍 Où est le prof ? <span class="modal-week" id="tutors-week"></span></div>
           <input type="search" id="tutors-search" class="tutors-search"
                  placeholder="Initiales du prof (ex: ADM)" autocomplete="off"
                  oninput="filterTutorList(this.value)">
@@ -239,7 +247,7 @@
     <div id="ical-overlay" class="selector-overlay" onclick="closeIcalOutside(event)">
       <div class="selector-panel card" style="max-width:520px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeIcal()">✕</button>
+        <button class="detail-close" onclick="closeIcal()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">📅 Ajouter à ton agenda</div>
@@ -279,10 +287,10 @@
     <div id="crous-overlay" class="selector-overlay" onclick="closeCrousOutside(event)">
       <div class="selector-panel card" style="max-width:560px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeCrous()">✕</button>
+        <button class="detail-close" onclick="closeCrous()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title crous-title" onclick="crousTitleTap()">🍽️ Menu du Resto U' Blagnac</div>
+          <button type="button" class="selector-section-title crous-title" onclick="crousTitleTap()">🍽️ Menu du Resto U' Blagnac</button>
           <div class="crous-warning">
             ⚠️ Menu indicatif fourni par le CROUS de Toulouse-Occitanie : il peut légèrement différer
             de ce qui est réellement servi, selon les arrivages et l'humeur du chef.

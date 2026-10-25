@@ -15,6 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Tente d'enrichir avec l'arbre API en arrière-plan
   loadGroupsFromAPI();
 
+  // Entree ou Espace sur une carte de cours (role=button) ouvre le detail comme un clic
+  document.getElementById('schedule-container').addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('course-card')) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
   // Ferme les modaux au raccourci Escape
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {

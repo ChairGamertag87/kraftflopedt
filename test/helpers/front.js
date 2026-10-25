@@ -15,6 +15,7 @@ function loadFront(files, extra = {}) {
     window:       {},
     localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
     state:        {},
+    setTimeout, clearTimeout, AbortController,
     ...extra,
   };
   sandbox.window = sandbox;

@@ -12,6 +12,17 @@ services:
       - kraftflopedt-adapter
     ports:
       - "127.0.0.1:8093:80"
+    # Limites et capacites minimales : le master nginx tourne en root (image
+    # officielle, Caddy cible kraftflopedt-web:80) mais ne garde que de quoi
+    # ouvrir le port 80 et passer ses workers a l'utilisateur nginx.
+    # Mesure en prod : ~5 Mo, 5 processus.
+    mem_limit: 128m
+    pids_limit: 128
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, NET_BIND_SERVICE]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     # wget de busybox est present dans nginx:alpine ; un nginx qui ne sert plus
     # index.html passe en unhealthy (visible dans docker ps et le panel).
     healthcheck:
@@ -27,8 +38,19 @@ services:
       dockerfile: Dockerfile.adapter
     container_name: kraftflopedt-adapter
     restart: unless-stopped
+    # USER node dans l'image : aucune capacite necessaire. Mesure en prod :
+    # ~26 Mo, 11 processus ; le store garde ~200 JSON en memoire.
+    mem_limit: 512m
+    pids_limit: 128
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
     environment:
       - PORT=3001
+      # Date civile de Paris pour /current-week et le repli CROUS : sans TZ le
+      # conteneur est en UTC et le lundi commence a 01h ou 02h heure locale
+      - TZ=Europe/Paris
       # Store local FlOpEDT (voir store.js) : emplois du temps toutes les heures,
       # groupes/contraintes/salles toutes les semaines, 3 s entre deux appels.
       - DEPTS=INFO,RT,CS,GIM
@@ -38,8 +60,8 @@ services:
       - WEEKS_BEHIND=2
     volumes:
       - kraftflopedt-adapter-data:/data
-    ports:
-      - "127.0.0.1:8094:3001"
+    # Aucun port publie : seul nginx (kraftflopedt-web, reseau default) parle a
+    # l'adapter. Depuis l'hote : docker exec kraftflopedt-adapter wget -qO- http://127.0.0.1:3001/status
     # /status repond depuis la memoire sans toucher FlOpEDT : un adapter bloque
     # (boucle d'evenements figee, port ferme) est detecte en 3 minutes.
     healthcheck:

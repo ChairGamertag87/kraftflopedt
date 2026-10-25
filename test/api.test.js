@@ -72,6 +72,9 @@ test('isGroupVisible : groupe exact, ancetres, sans filtre, cours sans groupe', 
   assert.equal(a.isGroupVisible('1A', '',   map), true);
   assert.equal(a.isGroupVisible(null, '1A', map), true);
   assert.equal(a.isGroupVisible('1A', 'inconnu', map), false);
+  // KF20050 : un nom de propriete herite ne doit pas planter ni rendre le cours visible
+  assert.equal(a.isGroupVisible('1A', 'constructor', map), false);
+  assert.equal(a.isGroupVisible('1A', '__proto__', map), false);
 });
 
 test('fetchAncestorMap : une table par promo, la derniere promo n ecrase pas la premiere', async () => {
@@ -101,6 +104,34 @@ test('fetchAncestorMap : sans promo (ou promo inconnue) les tables sont fusionne
 test('fetchAncestorMap : un arbre indisponible est une erreur, pas une table vide', async () => {
   const a = load(async () => ({ ok: false, status: 503 }));
   await assert.rejects(a.fetchAncestorMap('INFO', 'BUT1'), /arbre des groupes indisponible.*HTTP 503/);
+});
+
+test('fetchTree et fetchDurations : une requete par departement, partagee, retentee apres un echec (KF10022)', async () => {
+  const calls = [];
+  let fail = false;
+  const a = load(async url => { calls.push(url); if (fail) return { ok: false, status: 503, json: async () => ({}) }; return { ok: true, status: 200, json: async () => (url.includes('tree') ? TREE : { CM: { duration: 85 } }) }; });
+  await Promise.all([a.fetchAncestorMap('INFO', 'BUT1'), a.fetchAncestorMap('INFO', 'BUT2'), a.fetchTree('INFO'), a.fetchDurations('INFO'), a.fetchDurations('INFO')]);
+  assert.equal(calls.filter(u => u.includes('tree')).length, 1, 'un seul arbre INFO');
+  assert.equal(calls.filter(u => u.includes('constraints')).length, 1, 'une seule table de durees INFO');
+  await a.fetchTree('RT');
+  assert.equal(calls.filter(u => u.includes('tree')).length, 2, 'autre departement : autre requete');
+  fail = true;
+  await assert.rejects(a.fetchTree('CS'));
+  fail = false;
+  assert.ok(Array.isArray(await a.fetchTree('CS')), 'un echec n est pas memorise');
+});
+
+test('fetchSchedule : sans l arbre, les cours sont rendus mais pas mis en cache (KF10022)', async () => {
+  const course = { id: 1, day: 'm', start_time: 480, tutor: 'X', room: { name: 'A1' }, course: { type: 'TD', module: { name: 'M', abbrev: 'M' }, groups: [{ name: '1A', train_prog: 'BUT1' }] } };
+  const fetchImpl = async url => url.includes('tree')
+    ? { ok: false, status: 503, json: async () => ({ error: 'FlOpEDT indisponible' }) }
+    : { ok: true, status: 200, json: async () => (url.includes('constraints') ? { TD: { duration: 85 } } : [course]) };
+  const saved = [];
+  const { ctx, document } = loadUi(fetchImpl, { localStorage: { getItem: () => null, setItem: (k, v) => saved.push(k), removeItem() {}, key: () => null, length: 0 } });
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  assert.match(document._els['error-banner'].textContent, /Arbre des groupes indisponible/);
+  assert.equal(saved.filter(k => k.startsWith('edt-cache')).length, 0, 'resultat partiel jamais mis en cache');
 });
 
 test('fetchDurations : seules les contraintes portant une duree sont gardees', async () => {
@@ -146,6 +177,43 @@ test('loadSchedule : hors ligne, une semaine vide deja visitee n est pas "sans c
   assert.match(document._els['schedule-container'].innerHTML, /Aucun cours cette semaine/);
   assert.doesNotMatch(document._els['schedule-container'].innerHTML, /aucune copie locale/);
   assert.match(document._els['error-banner'].textContent, /Hors-ligne/);
+});
+
+test('apiFetch : le message d erreur de l adapter est lu, un corps non JSON ne plante pas (KF20063)', async () => {
+  const a = load(async () => ({ ok: false, status: 404, json: async () => ({ error: 'Semaine 2026-S20 hors de l annee universitaire en cours' }) }));
+  await assert.rejects(a.apiFetch('/fr/api/fetch/scheduledcourses/', 'x'), e => e.status === 404 && /S20 hors/.test(e.message));
+  const b = load(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); } }));
+  await assert.rejects(b.apiFetch('/fr/api/fetch/scheduledcourses/', 'x'), e => e.status === 502 && /HTTP 502/.test(e.message));
+  const c = load(async (url, opts) => { assert.ok(opts.signal, 'AbortController branche'); return { ok: true, status: 200, json: async () => [1] }; });
+  assert.deepEqual(plain(await c.apiFetch('/fr/api/fetch/scheduledcourses/', 'x')), [1]);
+});
+
+test('loadSchedule : un refus 4xx affiche la raison sans bouton Reessayer (KF20063)', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({ error: 'Semaine 2026-S20 hors de l annee universitaire en cours' }) });
+  const { ctx, document } = loadUi(fetchImpl);
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  const html = document._els['schedule-container'].innerHTML;
+  assert.match(html, /Semaine indisponible/);
+  assert.match(html, /S20 hors/);
+  assert.doesNotMatch(html, /Réessayer/);
+  assert.match(document._els['error-banner'].textContent, /S20 hors/);
+});
+
+test('changeWeek : la navigation s arrete aux bornes de l annee universitaire (KF20063)', () => {
+  const { ctx } = loadUi(okJson([]));
+  const state = require('vm').runInContext('state', ctx); // const du script, pas une globale du contexte
+  const now = new Date();
+  const start_year = now > new Date(now.getFullYear(), 6, 20) ? now.getFullYear() : now.getFullYear() - 1;
+  state.currentWeek = 27; state.currentYear = start_year;   // S26 (lundi 22-28 juin) est toujours hors fenetre
+  ctx.changeWeek(-1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [27, start_year]);
+  state.currentWeek = 35; state.currentYear = start_year + 1; // S36 (lundi 1er-7 sept) est toujours hors fenetre
+  ctx.changeWeek(1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [35, start_year + 1]);
+  state.currentWeek = 40; state.currentYear = start_year;
+  ctx.changeWeek(1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [41, start_year]);
 });
 
 test('fillPromoChips : aucune promo activee d office (KF30056)', () => {

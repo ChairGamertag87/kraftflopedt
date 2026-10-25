@@ -148,27 +148,48 @@ function isGroupVisible(courseGroup, selectedGroup, ancestors) {
 //  Generation
 // ════════════════════════════════════════════════════
 
+/** Initiales en majuscules -> initiales telles qu'ecrites dans FlOpEDT, pour un jeu d'entrees du store. */
+function knownTutors(entries) {
+  const out = new Map();
+  for (const entry of entries) {
+    const list = Array.isArray(entry.body) ? entry.body : (entry.body?.results || []);
+    for (const c of list) {
+      const tutors = [c?.tutor, ...(c?.course?.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username))].filter(Boolean);
+      for (const t of tutors) if (!out.has(t.toUpperCase())) out.set(t.toUpperCase(), t);
+    }
+  }
+  return out;
+}
+
 /**
  * @param {{dept: string, promo?: string, group?: string, tutor?: string}} sel
  * @returns {Promise<{ics: string, count: number, lastModified: string}|null>}  null si promo/groupe inconnu
  */
 async function build(sel) {
   const dept = sel.dept;
+
+  // Toute l'annee universitaire en cours, semaines passees comprises : un abonne
+  // garderait sinon seulement les WEEKS_BEHIND dernieres semaines dans son agenda
+  const entries = store.entries(ENDPOINT_COURSES, e => e.params.dept === dept && store.weekInWindow(Number(e.params.year), Number(e.params.week)));
+  // Sans aucune semaine en store (premier run, panne prolongee) un 200 vide
+  // viderait l'agenda des abonnes : 503, les clients gardent leur copie
+  if (!entries.length) throw Object.assign(new Error(`aucune semaine en store pour ${dept}`), { status: 503 });
+
   const [groups, durations] = await Promise.all([loadGroups(dept), loadDurations(dept)]);
 
   let name;
   if (sel.tutor) {
-    name = `${sel.tutor} · ${dept}`;
+    // Initiales connues du departement (tutor et supp_tutor), sans tenir compte de la casse
+    const tutor = knownTutors(entries).get(sel.tutor.toUpperCase());
+    if (!tutor) return null;
+    sel = { ...sel, tutor };
+    name = `${tutor} · ${dept}`;
   } else {
     if (!sel.promo || !groups.promos.includes(sel.promo)) return null;
     // Object.hasOwn : "constructor" in {} est vrai et faisait planter le filtre (503)
     if (sel.group && !Object.hasOwn(groups.byPromo[sel.promo], sel.group)) return null;
     name = [dept, sel.promo, sel.group].filter(Boolean).join(' · ');
   }
-
-  // Semaines entretenues par le store (pas les fichiers oublies d'annees passees)
-  const weeks = new Set(store.weeksToMaintain().map(w => `${w.year}-${w.week}`));
-  const entries = store.entries(ENDPOINT_COURSES, e => e.params.dept === dept && weeks.has(`${e.params.year}-${e.params.week}`));
 
   const lines = [
     'BEGIN:VCALENDAR',
@@ -190,8 +211,10 @@ async function build(sel) {
   for (const entry of entries) {
     const list = Array.isArray(entry.body) ? entry.body : (entry.body?.results || []);
     const monday = isoWeekMonday(entry.params.year, entry.params.week);
-    const stamp  = fmtUtc(entry.fetchedAt);
-    if (!lastModified || entry.fetchedAt > lastModified) lastModified = entry.fetchedAt;
+    // changedAt (store) : date du dernier changement de contenu, pas du dernier telechargement
+    const changed = entry.changedAt || entry.fetchedAt;
+    const stamp  = fmtUtc(changed);
+    if (!lastModified || changed > lastModified) lastModified = changed;
 
     for (const c of list) {
       if (c == null || seen.has(c.id)) continue;
@@ -209,7 +232,7 @@ async function build(sel) {
       const tutors  = [c.tutor, ...(course.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username))].filter(Boolean);
 
       if (sel.tutor) {
-        if (!tutors.includes(sel.tutor)) continue;
+        if (!tutors.some(t => t.toUpperCase() === sel.tutor.toUpperCase())) continue;
       } else {
         if (promo && promo !== sel.promo) continue;
         if (sel.group && !grpNames.some(g => isGroupVisible(g, sel.group, groups.byPromo[sel.promo]))) continue;

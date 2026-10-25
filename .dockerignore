@@ -1,0 +1,16 @@
+# Contexte de build : les Dockerfiles copient des fichiers precis, mais tout le
+# dossier partait au daemon (.git, journal de deploiement de plusieurs centaines
+# de Ko, tests, suivi de travail)
+.git
+.gitignore
+*.log
+*.log.*
+.auto-update.*
+.data
+.dockerignore
+.github
+deploy
+test
+docker-compose*.yml
+KF-PROGRESS.md
+*.md

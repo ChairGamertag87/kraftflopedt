@@ -111,7 +111,7 @@ function queryString(params) {
 //  Persistance : memoire + un fichier JSON par cle
 // ════════════════════════════════════════════════════
 
-const mem = new Map(); // key -> { key, endpoint, params, fetchedAt, body }
+const mem = new Map(); // key -> { key, endpoint, params, fetchedAt, changedAt, body }
 
 function fileOf(key) { return path.join(CONFIG.dataDir, `${key}.json`); }
 
@@ -247,7 +247,12 @@ async function drain() {
       const guard = watchdog(upstreamDeadlineMs() + CONFIG.upstreamTimeout, `Appel FlOpEDT sans reponse sur ${job.endpoint}`);
       try {
         const body  = await Promise.race([fetchUpstream(job.endpoint, job.params), guard.promise]);
-        const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: new Date().toISOString(), body };
+        const now   = new Date().toISOString();
+        // changedAt ne bouge que si le contenu change : les flux iCal en derivent
+        // DTSTAMP/LAST-MODIFIED, qui ne doivent pas changer a chaque passage horaire
+        const prev  = mem.get(job.key);
+        const same  = prev && JSON.stringify(prev.body) === JSON.stringify(body);
+        const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: now, changedAt: same ? (prev.changedAt || prev.fetchedAt) : now, body };
         mem.set(job.key, entry);
         try { persist(entry); } catch (e) { warn(`ecriture impossible ${job.key}: ${e.message}`); }
         upstream.lastOk = entry.fetchedAt;
@@ -356,9 +361,15 @@ function isoWeekMonday(year, week) {
   return mon;
 }
 
-/** Annee de debut de l'annee universitaire en cours (demarre en aout). */
+/**
+ * Annee de debut de l'annee universitaire en cours. Elle bascule le 20 juillet,
+ * comme la fin de weeksToMaintain : fin juillet l'annee est finie et la suivante
+ * est deja entretenue, weekInWindow doit donc l'accepter aussi (sinon 404 sur
+ * une semaine de rentree pourtant entretenue).
+ */
 function academicStartYear(now = new Date()) {
-  return now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const year = now.getUTCFullYear();
+  return now > new Date(Date.UTC(year, 6, 20)) ? year : year - 1;
 }
 
 /**
@@ -377,11 +388,8 @@ function weekInWindow(year, week, now = new Date()) {
  * universitaire (mi-juillet), triees par distance a la semaine courante.
  */
 function weeksToMaintain(now = new Date()) {
-  let startYear = academicStartYear(now);
-  let end = new Date(Date.UTC(startYear + 1, 6, 20));   // ~20 juillet
-  // Du 21 au 31 juillet l'annee universitaire est finie mais la suivante n'a
-  // pas "demarre" (aout) : la fenetre ne contenait plus que des semaines passees.
-  if (now > end) { startYear++; end = new Date(Date.UTC(startYear + 1, 6, 20)); }
+  const startYear = academicStartYear(now);
+  const end = new Date(Date.UTC(startYear + 1, 6, 20));   // ~20 juillet
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 7 * CONFIG.weeksBehind));
 
   const seen = new Set(), out = [];
