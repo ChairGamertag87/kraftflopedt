@@ -713,7 +713,10 @@ const server = http.createServer(async (req, res) => {
     try {
       const out = await ical.build(sel);
       if (!out) return send(res, 404, { error: sel.tutor ? 'Enseignant inconnu pour ce departement (initiales FlOpEDT, tutor ou co-enseignant)' : 'Promo ou groupe inconnu pour ce departement', ...sel });
-      const fname = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_');
+      const raw_name = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-');
+      const fname    = raw_name.replace(/[^\w.-]+/g, '_');   // repli ASCII (RFC 6266)
+      // filename* RFC 5987 : encodeURIComponent laisse passer '()* qui n'y sont pas admis
+      const fname_utf8 = encodeURIComponent(`${raw_name}.ics`).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
       const etag          = `"${crypto.createHash('sha1').update(out.ics).digest('base64url')}"`;
       const last_modified = new Date(out.lastModified);
       last_modified.setUTCMilliseconds(0); // If-Modified-Since est a la seconde
@@ -733,7 +736,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, {
         ...headers,
         'Content-Type':                'text/calendar; charset=utf-8',
-        'Content-Disposition':         `inline; filename="${fname}.ics"`,
+        'Content-Disposition':         `inline; filename="${fname}.ics"; filename*=UTF-8''${fname_utf8}`,
       });
       return res.end(out.ics);
     } catch (e) {
