@@ -130,6 +130,11 @@
   box-shadow: 3px 4px 8px rgba(44, 26, 0, 0.25);
   z-index: 20;
 }
+.course-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  z-index: 20;
+}
 .course-card::after {
   content: '';
   position: absolute;

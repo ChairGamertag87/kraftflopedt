@@ -150,7 +150,7 @@
     <div id="selector-overlay" class="selector-overlay" onclick="closeSelectorOutside(event)">
       <div class="selector-panel card">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeSelector()">✕</button>
+        <button class="detail-close" onclick="closeSelector()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">Département</div>
@@ -184,7 +184,7 @@
     <div id="rooms-overlay" class="selector-overlay" onclick="closeRoomsOutside(event)">
       <div class="selector-panel card" style="max-width:520px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeRooms()">✕</button>
+        <button class="detail-close" onclick="closeRooms()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">🚪 Salles libres <span class="modal-week" id="rooms-week"></span></div>
@@ -215,7 +215,7 @@
     <div id="tutors-overlay" class="selector-overlay" onclick="closeTutorsOutside(event)">
       <div class="selector-panel card" style="max-width:560px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeTutors()">✕</button>
+        <button class="detail-close" onclick="closeTutors()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">🔍 Où est le prof ? <span class="modal-week" id="tutors-week"></span></div>
@@ -239,7 +239,7 @@
     <div id="ical-overlay" class="selector-overlay" onclick="closeIcalOutside(event)">
       <div class="selector-panel card" style="max-width:520px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeIcal()">✕</button>
+        <button class="detail-close" onclick="closeIcal()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
           <div class="selector-section-title">📅 Ajouter à ton agenda</div>
@@ -279,10 +279,10 @@
     <div id="crous-overlay" class="selector-overlay" onclick="closeCrousOutside(event)">
       <div class="selector-panel card" style="max-width:560px;">
         <div class="tape"></div>
-        <button class="detail-close" onclick="closeCrous()">✕</button>
+        <button class="detail-close" onclick="closeCrous()" aria-label="Fermer">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title crous-title" onclick="crousTitleTap()">🍽️ Menu du Resto U' Blagnac</div>
+          <button type="button" class="selector-section-title crous-title" onclick="crousTitleTap()">🍽️ Menu du Resto U' Blagnac</button>
           <div class="crous-warning">
             ⚠️ Menu indicatif fourni par le CROUS de Toulouse-Occitanie : il peut légèrement différer
             de ce qui est réellement servi, selon les arrivages et l'humeur du chef.

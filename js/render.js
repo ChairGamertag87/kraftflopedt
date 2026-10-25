@@ -217,9 +217,12 @@ function buildGrid(courses) {
           ${c.tutor !== '—' ? `<div class="course-meta course-tutor">👤 ${escapeHtml(c.tutor)}</div>` : ''}`;
       }
 
+      // tabindex + role : la carte se prend au clavier (Entree/Espace dans main.js) ;
+      // un lecteur d'ecran annonce type, module, horaire et salle
+      const label = `${typeLabel(c.type)} ${c.abbrev || c.name}, ${timeStr}${c.room !== '—' ? `, salle ${c.room}` : ''}`;
       html += `
         <div class="course-card type-${c.type}${style.includes('--accent') ? ' has-accent' : ''}"
-          style="${style}"
+          style="${style}" tabindex="0" role="button" aria-label="${escapeHtml(label)}"
           onclick="showDetail(_displayedCourses[${idx}])">
           ${innerHtml}
         </div>`;
