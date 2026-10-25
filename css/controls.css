@@ -161,6 +161,10 @@
   width: 90%;
   max-width: 400px;
   padding: 32px 28px 24px;
+  /* Petits ecrans (375x667, paysage) : le panneau depassait du viewport, croix hors ecran et body bloque */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
   transform: translateY(20px) scale(0.96);
   transition: transform 0.25s;
 }
@@ -564,4 +568,11 @@
   12%  { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
   80%  { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(0.95); }
+}
+
+/* Ecrans bas (paysage telephone) : les listes internes prennent moins de hauteur (KF20062) */
+@media (max-height: 600px) {
+  .rooms-result { max-height: 34vh; }
+  .tutors-list  { max-height: 14vh; }
+  .crous-result { max-height: 30vh; }
 }
