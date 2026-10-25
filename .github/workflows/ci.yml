@@ -58,6 +58,7 @@ jobs:
           curl -sSI http://127.0.0.1:8080/ | tee /tmp/headers.txt
           grep -qi '^content-security-policy:' /tmp/headers.txt
           grep -qi '^x-content-type-options: nosniff' /tmp/headers.txt
-          # le fallback SPA : un chemin inconnu renvoie index.html en 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/flopedt/x)" = 200
+          # pas de fallback SPA : un chemin inconnu est un 404 (KF10097)
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/flopedt/x)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/robots.txt)" = 200
           docker rm -f web
