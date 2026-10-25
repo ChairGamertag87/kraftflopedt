@@ -55,6 +55,11 @@ const MIME = {
 
 // ── Dossier des fichiers statiques (là où se trouve index.html) ──
 const STATIC_DIR = path.join(__dirname);
+// Seuls les fichiers du site sont servis (le dépôt entier l'était : adapter.js,
+// docker-compose.yml, auto-update.log, test/...), comme Dockerfile.web ne copie
+// que ceux-là dans l'image de prod.
+const STATIC_ROOT_FILES = new Set(['/index.html', '/robots.txt', '/sitemap.xml', '/favicon.ico', '/apple-touch-icon.png']);
+const STATIC_DIR_RE = /^\/(css|js)\/[\w.-]+$/;
 
 // ════════════════════════════════════════════════════
 //  Serveur HTTP
@@ -183,6 +188,9 @@ const server = http.createServer((req, res) => {
   if (rel.split(path.sep).some(seg => seg.startsWith('.'))) {
     res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end(`Fichier non trouvé : ${pathname}`); return;
   }
+  if (pathname !== '/' && !STATIC_ROOT_FILES.has(pathname) && !STATIC_DIR_RE.test(pathname)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end(`Fichier non trouvé : ${pathname}`); return;
+  }
 
   const ext     = path.extname(filePath);
   const mime    = MIME[ext] || 'application/octet-stream';
@@ -198,7 +206,8 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
+// Serveur de dev : loopback seulement (il écoutait sur toutes les interfaces)
+server.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
   console.log('  ║       Serveur EDT IUT Blagnac            ║');
