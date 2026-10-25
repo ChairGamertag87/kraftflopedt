@@ -23,9 +23,9 @@
  *   node adapter.js              (port 3001 by default)
  *   PORT=8080 node adapter.js
  *
- * Example (port publie en loopback par docker-compose.yml ; en prod, nginx ne
- * relaie que /api/status, /api/crous/menu, /api/flopedt/* et /ical/*) :
- *   curl "http://127.0.0.1:8094/courses?week=17&year=2026&dept=INFO&group=1A"
+ * Example (aucun port publie sur l'hote ; en prod, nginx ne relaie que
+ * /api/status, /api/crous/menu, /api/flopedt/* et /ical/*) :
+ *   docker exec kraftflopedt-adapter wget -qO- "http://127.0.0.1:3001/courses?week=17&year=2026&dept=INFO&group=1A"
  */
 
 const http   = require('http');
@@ -289,11 +289,11 @@ const OPENAPI_SPEC = {
                + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.\n\n'
                + 'Public exposure (https://kraftflopedt.fr, through nginx): only /api/status (-> /status), '
                + '/api/crous/menu (-> /crous/menu), /api/flopedt/* and /ical/*. The other routes are reachable '
-               + 'from the host only (127.0.0.1:8094).',
+               + 'from the project Docker network only (docker exec kraftflopedt-adapter wget -qO- http://127.0.0.1:3001/...).',
     contact: { name: 'Clément Herrard', url: 'https://chairgamertag87.fr' },
   },
   servers: [
-    { url: 'http://127.0.0.1:8094', description: 'Host (docker-compose, loopback only)' },
+    { url: 'http://kraftflopedt-adapter:3001', description: 'Docker network of the project only (no host port)' },
   ],
   tags: [
     { name: 'Schedule', description: 'Course schedules' },

@@ -60,8 +60,8 @@ services:
       - WEEKS_BEHIND=2
     volumes:
       - kraftflopedt-adapter-data:/data
-    ports:
-      - "127.0.0.1:8094:3001"
+    # Aucun port publie : seul nginx (kraftflopedt-web, reseau default) parle a
+    # l'adapter. Depuis l'hote : docker exec kraftflopedt-adapter wget -qO- http://127.0.0.1:3001/status
     # /status repond depuis la memoire sans toucher FlOpEDT : un adapter bloque
     # (boucle d'evenements figee, port ferme) est detecte en 3 minutes.
     healthcheck:
