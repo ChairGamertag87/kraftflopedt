@@ -29,6 +29,9 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3001
+      # Date civile de Paris pour /current-week et le repli CROUS : sans TZ le
+      # conteneur est en UTC et le lundi commence a 01h ou 02h heure locale
+      - TZ=Europe/Paris
       # Store local FlOpEDT (voir store.js) : emplois du temps toutes les heures,
       # groupes/contraintes/salles toutes les semaines, 3 s entre deux appels.
       - DEPTS=INFO,RT,CS,GIM
