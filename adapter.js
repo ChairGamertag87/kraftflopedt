@@ -55,6 +55,18 @@ const DAY_INDEX = { m: 0, tu: 1, w: 2, th: 3, f: 4 };
 
 const DEFAULT_DURATIONS = { CM: 85, TD: 85, TP: 85, DS: 85, Projet: 85, QCM: 20, Conf: 90 };
 
+/**
+ * Duree d'un type de cours : contraintes du departement, puis suffixe numerique
+ * du type (TP240, TD120, CM90, X90 pour RT et GIM), puis valeurs par defaut, puis 85.
+ */
+function durationOf(type, durations) {
+  if (type && Object.hasOwn(durations, type) && Number.isFinite(durations[type])) return durations[type];
+  const suffix = /(\d+)$/.exec(type || '');
+  if (suffix) return Number(suffix[1]);
+  if (type && Object.hasOwn(DEFAULT_DURATIONS, type)) return DEFAULT_DURATIONS[type];
+  return 85;
+}
+
 function minutesToHHMM(m) {
   const h  = Math.floor(m / 60);
   const mn = m % 60;
@@ -109,7 +121,10 @@ async function fetchDurations(dept) {
   try {
     const data = await flopFetch('/fr/api/fetch/constraints/', { dept });
     const map  = {};
-    for (const [type, val] of Object.entries(data)) map[type] = val.duration;
+    // Une entree nulle ne doit pas faire perdre toute la table
+    for (const [type, val] of Object.entries(data)) {
+      if (Number.isFinite(val?.duration)) map[type] = val.duration;
+    }
     return map;
   } catch { return DEFAULT_DURATIONS; }
 }
@@ -130,7 +145,7 @@ function normalizeCourse(c, durations) {
   const module = course.module || {};
   const groups = course.groups || [];
   const startMin = c.start_time ?? 480;
-  const duration = durations[course.type] ?? 85;
+  const duration = durationOf(course.type, durations);
   const endMin   = startMin + duration;
 
   return {
@@ -236,7 +251,7 @@ async function getFreeRooms({ week, year, dept, day, start, end }) {
     if (c.day !== day || !roomName) continue;
 
     const cStart = c.start_time ?? 0;
-    const cEnd   = cStart + (durations[c.course?.type] ?? 85);
+    const cEnd   = cStart + durationOf(c.course?.type, durations);
 
     // Overlap check
     if (cStart < endNum && cEnd > startNum) busy.add(roomName);
