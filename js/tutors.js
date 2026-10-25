@@ -104,7 +104,13 @@ async function selectTutor(name) {
   document.querySelectorAll('#tutors-list .sel-chip').forEach(b =>
     b.classList.toggle('active', b.dataset.value === name));
 
-  const courses = await ensureWeekCourses();
+  let courses;
+  try {
+    courses = await ensureWeekCourses();
+  } catch (e) {
+    document.getElementById('tutors-result').innerHTML = `<div class="rooms-hint">Erreur : ${escapeHtml(e.message)}</div>`;
+    return;
+  }
   renderTutorSchedule(name, courses);
 }
 
