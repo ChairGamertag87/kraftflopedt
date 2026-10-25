@@ -16,6 +16,7 @@ let _tutorFilter   = '';         // texte tapé dans la recherche
 function openTutors() {
   document.getElementById('tutors-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  showModalWeek('tutors-week');
 
   if (_tutorSelected === null) {
     try { _tutorSelected = localStorage.getItem(TUTOR_KEY) || null; } catch (_) { /* ignore */ }

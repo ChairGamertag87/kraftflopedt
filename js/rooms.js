@@ -58,21 +58,30 @@ const ROOM_SLOTS = [
 //  Modal
 // ════════════════════════════
 
+/** Affiche dans une modale la semaine sur laquelle portent les résultats (celle de la grille). */
+function showModalWeek(id) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = getWeekDates(state.currentWeek, state.currentYear).label;
+}
+
 function openRooms() {
   document.getElementById('rooms-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  showModalWeek('rooms-week');
 
-  // Pré-sélectionne le jour actuel
+  // Pré-sélectionne « maintenant » seulement si la grille affiche la semaine
+  // courante : sur une autre semaine, le jour et l'heure du moment n'ont pas de sens
   const now = new Date();
+  const is_this_week = state.currentWeek === getISOWeek(now) && state.currentYear === getISOWeekYear(now);
   const dow = now.getDay() - 1;
-  if (dow >= 0 && dow <= 4 && _roomsDay === null) {
+  if (is_this_week && dow >= 0 && dow <= 4 && _roomsDay === null) {
     _roomsDay = dow;
   }
   if (_roomsDay === null) _roomsDay = 0;
 
   // Pré-sélectionne le créneau le plus proche
   if (_roomsHour === null) {
-    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const nowMin = is_this_week ? now.getHours() * 60 + now.getMinutes() : 0;
     const best = ROOM_SLOTS.reduce((prev, s) => s.value <= nowMin ? s : prev, ROOM_SLOTS[0]);
     _roomsHour = best.value;
   }

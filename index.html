@@ -187,7 +187,7 @@
         <button class="detail-close" onclick="closeRooms()">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title">🚪 Salles libres</div>
+          <div class="selector-section-title">🚪 Salles libres <span class="modal-week" id="rooms-week"></span></div>
         </div>
 
         <div class="selector-section">
@@ -218,7 +218,7 @@
         <button class="detail-close" onclick="closeTutors()">✕</button>
 
         <div class="selector-section">
-          <div class="selector-section-title">🔍 Où est le prof ?</div>
+          <div class="selector-section-title">🔍 Où est le prof ? <span class="modal-week" id="tutors-week"></span></div>
           <input type="search" id="tutors-search" class="tutors-search"
                  placeholder="Initiales du prof (ex: ADM)" autocomplete="off"
                  oninput="filterTutorList(this.value)">

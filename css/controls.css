@@ -251,6 +251,17 @@
   overflow-y: auto;
 }
 
+/* Semaine sur laquelle portent les salles libres et le suivi prof (KF20064) */
+.modal-week {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+  opacity: 0.8;
+}
+
 .rooms-hint {
   font-family: 'Special Elite', serif;
   font-size: 0.9rem;
