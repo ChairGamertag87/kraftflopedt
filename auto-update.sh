@@ -50,8 +50,11 @@ log "deploiement de $(git rev-parse --short "$TARGET") (dernier deploye : ${DEPL
 # --wait : le commit n'est marque deploye que si les conteneurs sont healthy ;
 # un build reussi suivi d'un conteneur qui meurt au demarrage etait sinon
 # considere comme deploye et jamais retente
-if ! docker compose up -d --build --wait --wait-timeout 120 2>&1 | tail -3; then
+# Sortie capturee en entier et journalisee seulement en cas d'echec : tail -3
+# ne montrait que les trois dernieres lignes, pas la cause d'un build rate
+if ! OUT=$(docker compose up -d --build --wait --wait-timeout 120 2>&1); then
   log "ECHEC du deploiement de $(git rev-parse --short "$TARGET"), nouvel essai au prochain passage"
+  printf '%s\n' "$OUT" | tail -40
   docker compose logs --tail 30 2>&1 || true
   exit 1
 fi
