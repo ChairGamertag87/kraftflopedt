@@ -6,7 +6,7 @@
 # nouvelle URL, le cache long redevient sans danger.
 FROM alpine:3.20 AS assets
 WORKDIR /src
-COPY index.html robots.txt sitemap.xml googlec21778c174c4ca43.html ./
+COPY index.html robots.txt sitemap.xml googlec21778c174c4ca43.html favicon.ico apple-touch-icon.png ./
 COPY css ./css
 COPY js ./js
 RUN set -eu; \
