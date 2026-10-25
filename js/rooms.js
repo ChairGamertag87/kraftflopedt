@@ -25,6 +25,7 @@ function getRoomBuilding(name) {
 
 // Cache
 let _allRooms    = null;
+let _roomGroups  = {};    // regroupement -> salles membres (fusion des 4 depts), voir occupiedRooms
 let _allCourses  = null;  // cours de la semaine, tous depts (partagé avec tutors.js)
 let _roomsWeek   = null;
 let _roomsYear   = null;
@@ -152,6 +153,27 @@ function extractIndividualRooms(roomData) {
   return rooms;
 }
 
+/** Regroupements (B101-B102, Entretien, A011 + Amphi2...) : nom -> salles membres, le nom lui-meme exclu. */
+function extractRoomGroups(roomData) {
+  const groups = {};
+  for (const [key, members] of Object.entries(roomData.roomgroups || {})) {
+    if (members.length === 1 && members[0] === key) continue;
+    groups[key] = members.filter(m => m !== key);
+  }
+  return groups;
+}
+
+/**
+ * Salles reellement occupees par un cours : un cours place dans un regroupement
+ * occupe chacune de ses salles membres (les membres qui sont eux-memes des
+ * regroupements sont ignores).
+ */
+function occupiedRooms(room) {
+  if (!room) return [];
+  if (!Object.hasOwn(_roomGroups, room)) return [room];
+  return _roomGroups[room].filter(m => !Object.hasOwn(_roomGroups, m));
+}
+
 /**
  * Salles de tous les departements. Un departement en echec est signale dans
  * `failed` : l'appelant ne memorise pas un resultat partiel (les salles du
@@ -160,18 +182,20 @@ function extractIndividualRooms(roomData) {
  */
 async function fetchAllRooms() {
   const allRooms = new Set();
+  const groups = {};
   const failed = [];
   const promises = DEPTS.map(dept =>
     apiFetch('/fr/api/rooms/all/', `dept=${dept}`)
       .then(data => {
         const rooms = extractIndividualRooms(data);
         rooms.forEach(r => allRooms.add(r));
+        Object.assign(groups, extractRoomGroups(data));
       })
       .catch(e => { failed.push(dept); console.warn(`[ROOMS] Erreur salles ${dept}:`, e.message); })
   );
   await Promise.all(promises);
   if (failed.length === DEPTS.length) throw new Error('liste des salles indisponible');
-  return { rooms: allRooms, failed };
+  return { rooms: allRooms, groups, failed };
 }
 
 // Durées de secours si /fetch/constraints/ ne répond pas
@@ -302,6 +326,7 @@ async function searchFreeRooms() {
     ]);
     // Une liste partielle est gardee avec son horodatage (voir weekCoursesWarning)
     _allRooms = roomsRes.rooms;
+    if (roomsRes.groups) _roomGroups = roomsRes.groups;
     _roomsFailed = roomsRes.failed;
     _roomsPartialAt = roomsRes.failed.length ? Date.now() : 0;
     rooms   = roomsRes.rooms;
@@ -315,7 +340,7 @@ async function searchFreeRooms() {
   const occupied = new Set();
   courses.forEach(c => {
     if (c.room && c.day === _roomsDay && _roomsHour >= c.start && _roomsHour < c.end) {
-      occupied.add(c.room);
+      occupiedRooms(c.room).forEach(r => occupied.add(r));
     }
   });
 
