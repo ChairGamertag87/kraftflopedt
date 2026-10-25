@@ -72,6 +72,9 @@ test('isGroupVisible : groupe exact, ancetres, sans filtre, cours sans groupe', 
   assert.equal(a.isGroupVisible('1A', '',   map), true);
   assert.equal(a.isGroupVisible(null, '1A', map), true);
   assert.equal(a.isGroupVisible('1A', 'inconnu', map), false);
+  // KF20050 : un nom de propriete herite ne doit pas planter ni rendre le cours visible
+  assert.equal(a.isGroupVisible('1A', 'constructor', map), false);
+  assert.equal(a.isGroupVisible('1A', '__proto__', map), false);
 });
 
 test('fetchAncestorMap : une table par promo, la derniere promo n ecrase pas la premiere', async () => {

@@ -94,7 +94,8 @@ function isGroupVisible(courseGroup, selectedGroup, ancestorMap) {
   if (courseGroup === selectedGroup) return true;
 
   // Le groupe du cours est-il un ancêtre du groupe sélectionné ?
-  const ancestors = ancestorMap[selectedGroup] || [];
+  // Object.hasOwn : "constructor" est une clé héritée de {} et n'a pas de includes
+  const ancestors = Object.hasOwn(ancestorMap, selectedGroup) ? ancestorMap[selectedGroup] : [];
   return ancestors.includes(courseGroup);
 }
 

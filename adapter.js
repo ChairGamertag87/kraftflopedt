@@ -118,7 +118,8 @@ function isGroupVisible(courseGroup, selectedGroup, ancestorMap) {
   if (!selectedGroup) return true;
   if (!courseGroup)   return true;
   if (courseGroup === selectedGroup) return true;
-  return (ancestorMap[selectedGroup] || []).includes(courseGroup);
+  // Object.hasOwn : "constructor" est une cle heritee de {} et n'a pas de includes
+  return (Object.hasOwn(ancestorMap, selectedGroup) ? ancestorMap[selectedGroup] : []).includes(courseGroup);
 }
 
 /**
@@ -170,6 +171,11 @@ async function getCourses({ week, year, dept, promo, group }) {
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
+
+  // Une table vide signifie un arbre indisponible, pas un groupe inconnu
+  if (group && Object.keys(ancestorMap).length && !Object.hasOwn(ancestorMap, group)) {
+    throw store.httpError(400, `Unknown group "${group}" for ${dept}${promo ? '/' + promo : ''}`);
+  }
 
   return list
     .map(c => normalizeCourse(c, durations))
