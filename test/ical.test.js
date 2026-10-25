@@ -1,8 +1,12 @@
 'use strict';
 process.env.DATA_DIR = require('os').tmpdir() + '/kraftflopedt-test-ical';
+process.env.DISABLE_REFRESH = '1';
+const fs = require('fs');
+const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const ical = require('../ical');
+const store = require('../store');
 
 test('isoWeekMonday : lundi de la semaine ISO, y compris en bord d annee', () => {
   const d = (y, w) => ical.isoWeekMonday(y, w).toISOString().slice(0, 10);
@@ -67,4 +71,45 @@ test('parsePath : formes refusees', () => {
   assert.equal(ical.parsePath('/ical/INFO/BUT1/%E0%A4%A.ics'), null, 'encodage invalide');
   assert.equal(ical.parsePath(`/ical/INFO/BUT1/${'a'.repeat(65)}.ics`), null, 'segment trop long');
   assert.equal(ical.parsePath('/prof/INFO/X.ics'), null);
+});
+
+// ── build() sur un store amorce depuis des fichiers (aucun appel FlOpEDT) ──
+
+/** Semaine ISO du 15 octobre de l annee universitaire en cours : toujours dans la fenetre du store. */
+function weekInCurrentYear() {
+  const now = new Date();
+  const start_year = now > new Date(Date.UTC(now.getUTCFullYear(), 6, 20)) ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const d = new Date(Date.UTC(start_year, 9, 15));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const week = Math.ceil((((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function writeEntry(key, endpoint, params, body) {
+  const now = new Date().toISOString();
+  fs.writeFileSync(path.join(process.env.DATA_DIR, `${key}.json`), JSON.stringify({ key, endpoint, params, fetchedAt: now, changedAt: now, body }));
+}
+
+test('build : prof inconnu -> null (404), casse ignoree, co-enseignant trouve, departement sans semaine -> 503 (KF20075)', async () => {
+  fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
+  fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+  const { year, week } = weekInCurrentYear();
+  const course = (id, tutor, supp) => ({
+    id, day: 'm', start_time: 480, tutor, room: { name: 'A1' },
+    course: { type: 'TD', module: { abbrev: 'M1', name: 'Module 1' }, groups: [{ name: '1A', train_prog: 'BUT1' }], supp_tutor: supp },
+  });
+  writeEntry('groups-structural-tree__dept=GIM', '/fr/api/groups/structural/tree/', { dept: 'GIM' },
+    [{ name: 'CE', promo: 'BUT1', children: [{ name: '1A' }] }]);
+  writeEntry('fetch-constraints__dept=GIM', '/fr/api/fetch/constraints/', { dept: 'GIM' }, { TD: { duration: 90 } });
+  writeEntry(`fetch-scheduledcourses__dept=GIM&week=${week}&work_copy=0&year=${year}`, '/fr/api/fetch/scheduledcourses/',
+    { dept: 'GIM', week, year, work_copy: 0 }, [course(1, 'ABC', [{ username: 'DEF' }]), course(2, 'ABC', [])]);
+  store.start();
+
+  assert.equal(await ical.build({ dept: 'GIM', tutor: 'ZZZ' }), null, 'initiales inconnues');
+  const lower = await ical.build({ dept: 'GIM', tutor: 'abc' });
+  assert.equal(lower.count, 2, 'casse ignoree');
+  assert.match(lower.ics, /X-WR-CALNAME:EDT ABC · GIM/, 'initiales canoniques de FlOpEDT');
+  const supp = await ical.build({ dept: 'GIM', tutor: 'def' });
+  assert.equal(supp.count, 1, 'co-enseignant (supp_tutor) connu');
+  await assert.rejects(ical.build({ dept: 'RT', promo: 'BUT1' }), e => e.status === 503, 'aucune semaine en store');
 });

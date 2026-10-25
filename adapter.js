@@ -712,7 +712,7 @@ const server = http.createServer(async (req, res) => {
     if (!sel) return send(res, 404, { error: 'Flux iCal inconnu. Formes : /ical/<dept>/<promo>.ics, /ical/<dept>/<promo>/<groupe>.ics, /ical/prof/<dept>/<initiales>.ics' });
     try {
       const out = await ical.build(sel);
-      if (!out) return send(res, 404, { error: 'Promo ou groupe inconnu pour ce departement', ...sel });
+      if (!out) return send(res, 404, { error: sel.tutor ? 'Enseignant inconnu pour ce departement (initiales FlOpEDT, tutor ou co-enseignant)' : 'Promo ou groupe inconnu pour ce departement', ...sel });
       const fname = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_');
       const etag          = `"${crypto.createHash('sha1').update(out.ics).digest('base64url')}"`;
       const last_modified = new Date(out.lastModified);
