@@ -166,9 +166,9 @@ async function build(sel) {
     name = [dept, sel.promo, sel.group].filter(Boolean).join(' · ');
   }
 
-  // Semaines entretenues par le store (pas les fichiers oublies d'annees passees)
-  const weeks = new Set(store.weeksToMaintain().map(w => `${w.year}-${w.week}`));
-  const entries = store.entries(ENDPOINT_COURSES, e => e.params.dept === dept && weeks.has(`${e.params.year}-${e.params.week}`));
+  // Toute l'annee universitaire en cours, semaines passees comprises : un abonne
+  // garderait sinon seulement les WEEKS_BEHIND dernieres semaines dans son agenda
+  const entries = store.entries(ENDPOINT_COURSES, e => e.params.dept === dept && store.weekInWindow(Number(e.params.year), Number(e.params.week)));
 
   const lines = [
     'BEGIN:VCALENDAR',
