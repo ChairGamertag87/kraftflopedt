@@ -668,7 +668,9 @@ const server = http.createServer(async (req, res) => {
 
   const parsed = url.parse(req.url, true);
 
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  // Le healthcheck (wget busybox sur /status toutes les 60 s) n'est pas journalise
+  const is_healthcheck = parsed.pathname === '/status' && /^Wget/.test(req.headers['user-agent'] || '');
+  if (!is_healthcheck) console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
 
   // Documentation routes (HTML + raw OpenAPI spec)
   if (parsed.pathname === '/docs') {
