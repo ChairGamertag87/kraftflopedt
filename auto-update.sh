@@ -19,6 +19,13 @@ cd "$(dirname "$0")"
 exec 9>.auto-update.lock
 flock -n 9 || exit 0
 
+# Rotation du journal (cron redirige dans auto-update.log) : au-dela de 1 Mo,
+# le fichier courant devient .1 (la precedente .1 est ecrasee)
+LOG=auto-update.log
+if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt 1048576 ]; then
+  mv -f "$LOG" "$LOG.1"
+fi
+
 STATE=.auto-update.deployed
 log() { echo "[$(date '+%F %T')] $*"; }
 
