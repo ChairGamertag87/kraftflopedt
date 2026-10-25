@@ -30,7 +30,11 @@ let _roomsWeek   = null;
 let _roomsYear   = null;
 let _coursesPromise = null; // chargement en cours, pour ne pas le lancer deux fois
 let _coursesPromiseKey = null; // "annee-semaine" de ce chargement
-let _coursesFailed  = [];   // departements en echec au dernier chargement (resultat partiel, non memorise)
+let _coursesFailed  = [];   // departements en echec au dernier chargement (resultat partiel)
+let _coursesPartialAt = 0;  // horodatage d'un resultat partiel : retente apres PARTIAL_RETRY_MS ou au clic
+let _roomsFailed    = [];   // idem pour la liste des salles
+let _roomsPartialAt = 0;
+const PARTIAL_RETRY_MS = 60000;
 
 // État sélection
 let _roomsDay  = null;
@@ -224,10 +228,27 @@ async function fetchAllCoursesForWeek() {
   return { courses: allCourses, failed };
 }
 
-/** Avertissement HTML si le dernier chargement de la semaine etait partiel, sinon ''. */
+/** Avertissement HTML si le dernier chargement (cours ou salles) etait partiel, sinon ''. */
 function weekCoursesWarning() {
-  if (!_coursesFailed.length) return '';
-  return `<div class="rooms-hint">⚠️ Données incomplètes : ${escapeHtml(_coursesFailed.join(', '))} injoignable${_coursesFailed.length > 1 ? 's' : ''}, réessaie plus tard</div>`;
+  const failed = [...new Set([..._coursesFailed, ..._roomsFailed])];
+  if (!failed.length) return '';
+  // Le resultat partiel est garde PARTIAL_RETRY_MS : chaque clic sur un chip
+  // relancait sinon les 8 requetes de la semaine
+  return `<div class="rooms-hint">⚠️ Données incomplètes : ${escapeHtml(failed.join(', '))} injoignable${failed.length > 1 ? 's' : ''}
+    · <a href="#" onclick="retryWeekCourses(event)">réessayer</a></div>`;
+}
+
+/** Clic sur l'avertissement : oublie le resultat partiel et recharge la modale ouverte. */
+function retryWeekCourses(e) {
+  if (e) e.preventDefault();
+  _coursesPartialAt = 0;
+  _roomsPartialAt = 0;
+  if (document.getElementById('rooms-overlay').classList.contains('open')) searchFreeRooms();
+  else refreshTutors();
+}
+
+function partialExpired(failed, at) {
+  return failed.length > 0 && Date.now() - at > PARTIAL_RETRY_MS;
 }
 
 /**
@@ -235,7 +256,8 @@ function weekCoursesWarning() {
  * rechargés seulement si la semaine affichée a changé.
  */
 async function ensureWeekCourses() {
-  const stale = !_allCourses || _roomsWeek !== state.currentWeek || _roomsYear !== state.currentYear;
+  const stale = !_allCourses || _roomsWeek !== state.currentWeek || _roomsYear !== state.currentYear
+    || partialExpired(_coursesFailed, _coursesPartialAt);
   if (stale) {
     const week = state.currentWeek, year = state.currentYear;
     const key  = `${year}-${week}`;
@@ -246,9 +268,9 @@ async function ensureWeekCourses() {
       const p = fetchAllCoursesForWeek().then(({ courses, failed }) => {
         _allCourses = courses;
         _coursesFailed = failed;
-        // Resultat partiel : pas memorise comme "semaine chargee", il sera retente
-        if (failed.length === 0) { _roomsWeek = week; _roomsYear = year; }
-        else { _roomsWeek = null; _roomsYear = null; }
+        _roomsWeek = week; _roomsYear = year;
+        // Resultat partiel : garde avec son horodatage, retente apres le delai ou au clic
+        _coursesPartialAt = failed.length ? Date.now() : 0;
         if (_coursesPromise === p) { _coursesPromise = null; _coursesPromiseKey = null; }
         return courses;
       }, e => {
@@ -273,12 +295,15 @@ async function searchFreeRooms() {
 
   let rooms, courses;
   try {
+    const rooms_stale = !_allRooms || partialExpired(_roomsFailed, _roomsPartialAt);
     const [roomsRes, coursesRes] = await Promise.all([
-      _allRooms ? { rooms: _allRooms, failed: [] } : fetchAllRooms(),
+      rooms_stale ? fetchAllRooms() : { rooms: _allRooms, failed: _roomsFailed },
       ensureWeekCourses(),
     ]);
-    // La liste des salles n'est memorisee que si tous les departements ont repondu
-    if (roomsRes.failed.length === 0) _allRooms = roomsRes.rooms;
+    // Une liste partielle est gardee avec son horodatage (voir weekCoursesWarning)
+    _allRooms = roomsRes.rooms;
+    _roomsFailed = roomsRes.failed;
+    _roomsPartialAt = roomsRes.failed.length ? Date.now() : 0;
     rooms   = roomsRes.rooms;
     courses = coursesRes;
   } catch (e) {
