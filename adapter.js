@@ -163,6 +163,8 @@ function normalizeCourse(c, durations) {
     duration,
     room:      c.room?.name || null,
     tutor:     c.tutor || null,
+    // FlOpEDT : supp_tutor = [{ username }] (parfois des chaines)
+    suppTutors: (course.supp_tutor || []).map(t => (typeof t === 'string' ? t : t?.username)).filter(Boolean),
     groups:    groups.map(g => g.name),
     promo:     groups[0]?.train_prog || null,
     color:     module.display?.color_bg  || null,
@@ -387,6 +389,7 @@ const OPENAPI_SPEC = {
           duration:  { type: 'integer', example: 85 },
           room:      { type: 'string',  nullable: true, example: 'B009' },
           tutor:     { type: 'string',  nullable: true, example: 'NEK' },
+          suppTutors: { type: 'array', items: { type: 'string' }, description: 'Co-enseignants (supp_tutor FlOpEDT)', example: ['MDM'] },
           groups:    { type: 'array',   items: { type: 'string' }, example: ['1A'] },
           promo:     { type: 'string',  nullable: true, example: 'BUT1' },
           color:     { type: 'string',  nullable: true, example: '#af3014' },
