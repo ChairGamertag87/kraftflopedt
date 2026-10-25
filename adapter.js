@@ -628,6 +628,11 @@ const server = http.createServer(async (req, res) => {
   const handler = ROUTES[parsed.pathname];
   if (!handler) return send(res, 404, { error: 'Unknown route', path: parsed.pathname });
 
+  // url.parse rend un tableau pour un parametre repete : les filtres compareraient
+  // une chaine a un tableau et repondraient 200 avec une liste vide
+  const repeated = Object.keys(parsed.query).filter(k => Array.isArray(parsed.query[k]));
+  if (repeated.length) return send(res, 400, { error: `Repeated query parameter: ${repeated.join(', ')}` });
+
   try {
     const data = await handler(parsed.query);
     send(res, 200, { data });
