@@ -22,8 +22,8 @@ flock -n 9 || exit 0
 STATE=.auto-update.deployed
 log() { echo "[$(date '+%F %T')] $*"; }
 
-if ! git fetch origin main --quiet 2>/dev/null; then
-  log "fetch impossible (reseau ?), nouvel essai au prochain passage"
+if ! ERR=$(git fetch origin main --quiet 2>&1); then
+  log "fetch impossible, nouvel essai au prochain passage : ${ERR}"
   exit 0
 fi
 TARGET=$(git rev-parse origin/main)
