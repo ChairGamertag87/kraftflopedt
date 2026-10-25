@@ -111,7 +111,7 @@ function queryString(params) {
 //  Persistance : memoire + un fichier JSON par cle
 // ════════════════════════════════════════════════════
 
-const mem = new Map(); // key -> { key, endpoint, params, fetchedAt, body }
+const mem = new Map(); // key -> { key, endpoint, params, fetchedAt, changedAt, body }
 
 function fileOf(key) { return path.join(CONFIG.dataDir, `${key}.json`); }
 
@@ -247,7 +247,12 @@ async function drain() {
       const guard = watchdog(upstreamDeadlineMs() + CONFIG.upstreamTimeout, `Appel FlOpEDT sans reponse sur ${job.endpoint}`);
       try {
         const body  = await Promise.race([fetchUpstream(job.endpoint, job.params), guard.promise]);
-        const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: new Date().toISOString(), body };
+        const now   = new Date().toISOString();
+        // changedAt ne bouge que si le contenu change : les flux iCal en derivent
+        // DTSTAMP/LAST-MODIFIED, qui ne doivent pas changer a chaque passage horaire
+        const prev  = mem.get(job.key);
+        const same  = prev && JSON.stringify(prev.body) === JSON.stringify(body);
+        const entry = { key: job.key, endpoint: job.endpoint, params: job.params, fetchedAt: now, changedAt: same ? (prev.changedAt || prev.fetchedAt) : now, body };
         mem.set(job.key, entry);
         try { persist(entry); } catch (e) { warn(`ecriture impossible ${job.key}: ${e.message}`); }
         upstream.lastOk = entry.fetchedAt;

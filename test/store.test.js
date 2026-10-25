@@ -181,6 +181,25 @@ test('get : une cle stale en echec recent ne relance pas FlOpEDT a chaque lectur
   } finally { store.CONFIG.refreshStatic = saved_static; restore(); }
 });
 
+test('refresh : changedAt ne bouge que si le corps change (KF20073)', async () => {
+  let body = '[{"id":1}]';
+  const restore = fakeUpstream((req, cb) => {
+    const res = fakeResponse();
+    setImmediate(() => { cb(res); res.emit('data', Buffer.from(body)); res.complete = true; res.emit('end'); res.emit('close'); });
+  });
+  try {
+    const first = await store.refresh(TREE, { dept: 'CS' });
+    assert.equal(first.changedAt, first.fetchedAt);
+    await new Promise(r => setTimeout(r, 5));
+    const second = await store.refresh(TREE, { dept: 'CS' });
+    assert.notEqual(second.fetchedAt, first.fetchedAt);
+    assert.equal(second.changedAt, first.changedAt, 'meme corps : date de changement conservee');
+    body = '[{"id":2}]';
+    const third = await store.refresh(TREE, { dept: 'CS' });
+    assert.equal(third.changedAt, third.fetchedAt, 'corps different : nouvelle date');
+  } finally { restore(); }
+});
+
 test('get : une semaine passee n est jamais stale, une semaine entretenue l est (KF10089)', async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const saved_courses = store.CONFIG.refreshCourses;

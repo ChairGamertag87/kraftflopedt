@@ -28,8 +28,9 @@
  *   curl "http://127.0.0.1:8094/courses?week=17&year=2026&dept=INFO&group=1A"
  */
 
-const http  = require('http');
-const url   = require('url');
+const http   = require('http');
+const url    = require('url');
+const crypto = require('crypto');
 
 const PORT         = process.env.PORT || 3001;
 const FLOPEDT_HOST = 'flopedt.iut-blagnac.fr';
@@ -713,13 +714,26 @@ const server = http.createServer(async (req, res) => {
       const out = await ical.build(sel);
       if (!out) return send(res, 404, { error: 'Promo ou groupe inconnu pour ce departement', ...sel });
       const fname = ['edt', sel.dept, sel.promo, sel.group, sel.tutor].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_');
-      res.writeHead(200, {
-        'Content-Type':                'text/calendar; charset=utf-8',
-        'Content-Disposition':         `inline; filename="${fname}.ics"`,
+      const etag          = `"${crypto.createHash('sha1').update(out.ics).digest('base64url')}"`;
+      const last_modified = new Date(out.lastModified);
+      last_modified.setUTCMilliseconds(0); // If-Modified-Since est a la seconde
+      const headers = {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control':               'public, max-age=600',
-        'Last-Modified':               new Date(out.lastModified).toUTCString(),
+        'ETag':                        etag,
+        'Last-Modified':               last_modified.toUTCString(),
         'X-Event-Count':               String(out.count),
+      };
+      const if_none_match     = req.headers['if-none-match'];
+      const if_modified_since = Date.parse(req.headers['if-modified-since'] || '');
+      const not_modified = if_none_match
+        ? if_none_match.split(',').some(t => t.trim() === etag || t.trim() === 'W/' + etag)
+        : (Number.isFinite(if_modified_since) && last_modified.getTime() <= if_modified_since);
+      if (not_modified) { res.writeHead(304, headers); return res.end(); }
+      res.writeHead(200, {
+        ...headers,
+        'Content-Type':                'text/calendar; charset=utf-8',
+        'Content-Disposition':         `inline; filename="${fname}.ics"`,
       });
       return res.end(out.ics);
     } catch (e) {

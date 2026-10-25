@@ -190,8 +190,10 @@ async function build(sel) {
   for (const entry of entries) {
     const list = Array.isArray(entry.body) ? entry.body : (entry.body?.results || []);
     const monday = isoWeekMonday(entry.params.year, entry.params.week);
-    const stamp  = fmtUtc(entry.fetchedAt);
-    if (!lastModified || entry.fetchedAt > lastModified) lastModified = entry.fetchedAt;
+    // changedAt (store) : date du dernier changement de contenu, pas du dernier telechargement
+    const changed = entry.changedAt || entry.fetchedAt;
+    const stamp  = fmtUtc(changed);
+    if (!lastModified || changed > lastModified) lastModified = changed;
 
     for (const c of list) {
       if (c == null || seen.has(c.id)) continue;
