@@ -175,7 +175,7 @@ function renderTutorSchedule(name, courses) {
     const isToday = isThisWeek && d === todayDow;
 
     html += `<div class="tutors-day${isToday ? ' today' : ''}">
-      <div class="rooms-building-name">${DAYS[d]} <span style="font-family:Inconsolata,monospace;font-size:0.78rem;font-weight:400;">${date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span></div>`;
+      <div class="rooms-building-name">${DAYS[d]} <span style="font-family:Inconsolata,monospace;font-size:0.78rem;font-weight:400;">${formatDayHeader(date)}</span></div>`;
 
     daySlots.forEach(c => {
       const isCurrent = current === c;

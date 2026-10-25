@@ -35,6 +35,7 @@ test('getWeekDates : lundi et vendredi de la semaine, libelle S<n>', () => {
   assert.equal(w.fri.getDate(), 2);
   assert.equal(w.fri.getMonth(), 9);
   assert.match(w.label, /^S40 /);
+  assert.match(w.label, /2026$/, 'l annee figure dans le libelle (KF10086)');
 
   // S1 2026 commence le lundi 29 decembre 2025
   const s1 = u.getWeekDates(1, 2026);
@@ -56,6 +57,12 @@ test('isWeekInAcademicYear : fenetre du 1er juillet au 31 aout suivant, bascule 
   assert.equal(u.isWeekInAcademicYear(36, 2027, now), false);
   assert.equal(u.isWeekInAcademicYear(40, 2026, new Date(2027, 6, 25)), false, 'apres le 20 juillet, annee suivante');
   assert.equal(u.isWeekInAcademicYear(36, 2027, new Date(2027, 6, 25)), true);
+});
+
+test('formatDayHeader : annee affichee seulement si elle differe de l annee courante (KF10086)', () => {
+  const now = new Date(2026, 9, 25);
+  assert.doesNotMatch(u.formatDayHeader(new Date(2026, 8, 28), now), /2026/);
+  assert.match(u.formatDayHeader(new Date(2027, 0, 4), now), /2027/);
 });
 
 test('escapeHtml : les cinq caracteres dangereux, null et nombres', () => {

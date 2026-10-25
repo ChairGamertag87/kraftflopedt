@@ -143,7 +143,7 @@ function buildGrid(courses) {
     html += `
       <div class="day-header${isToday ? ' today' : ''}" data-day="${d}">
         ${DAYS[d]}
-        <span>${date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
+        <span>${formatDayHeader(date)}</span>
       </div>`;
   }
 

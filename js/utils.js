@@ -42,7 +42,16 @@ function getWeekDates(week, year) {
   const fri = new Date(mon);
   fri.setDate(mon.getDate() + 4);
   const fmt = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  return { mon, fri, label: `S${week} — ${fmt(mon)} au ${fmt(fri)}` };
+  // L'année est toujours affichée : S1 ou une semaine d'une autre année n'en disaient rien
+  const fmt_year = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  return { mon, fri, label: `S${week} — ${fmt(mon)} au ${fmt_year(fri)}` };
+}
+
+/** Date courte d'une colonne (jour + mois), avec l'année quand elle n'est pas celle du jour. */
+function formatDayHeader(d, now = new Date()) {
+  const opts = { day: '2-digit', month: 'short' };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('fr-FR', opts);
 }
 
 /**
