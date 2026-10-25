@@ -1,6 +1,7 @@
 # etat local du script de deploiement (voir auto-update.sh)
 .auto-update.lock
 .auto-update.deployed
+.auto-update.builder-prune
 auto-update.log
 
 # specifique a l hote (reseau du reverse proxy)

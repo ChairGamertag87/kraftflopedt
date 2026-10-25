@@ -59,5 +59,13 @@ if ! OUT=$(docker compose up -d --build --wait --wait-timeout 120 2>&1); then
   exit 1
 fi
 echo "$TARGET" > "$STATE"
-docker image prune -f >/dev/null
+# Seules les images de ce projet : le prune global supprimait aussi les images
+# dangling des projets voisins. Le cache de build (jamais touche par image prune)
+# est borne une fois par semaine.
+docker image prune -f --filter label=com.docker.compose.project=kraftflopedt >/dev/null
+PRUNE_STAMP=.auto-update.builder-prune
+if [ -z "$(find "$PRUNE_STAMP" -mtime -7 2>/dev/null)" ]; then
+  docker builder prune -f --keep-storage 1g >/dev/null 2>&1 || true
+  touch "$PRUNE_STAMP"
+fi
 log "deploye : $(git log -1 --oneline)"
