@@ -23,8 +23,9 @@
  *   node adapter.js              (port 3001 by default)
  *   PORT=8080 node adapter.js
  *
- * Example:
- *   curl "https://kraftflopedt.habibiserver.dev/courses?week=17&year=2026&dept=INFO&group=1A"
+ * Example (port publie en loopback par docker-compose.yml ; en prod, nginx ne
+ * relaie que /api/status, /api/crous/menu, /api/flopedt/* et /ical/*) :
+ *   curl "http://127.0.0.1:8094/courses?week=17&year=2026&dept=INFO&group=1A"
  */
 
 const http  = require('http');
@@ -284,12 +285,14 @@ const OPENAPI_SPEC = {
     description: 'A clean REST adapter that wraps the messy FlOpEDT API (IUT Blagnac).\n\n'
                + 'Returns flat, predictable JSON. Built with vanilla Node.js, zero dependencies.\n\n'
                + 'All data is served from a local store refreshed in the background '
-               + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.',
+               + '(timetables hourly, groups/constraints/rooms weekly), so responses never wait for FlOpEDT.\n\n'
+               + 'Public exposure (https://kraftflopedt.fr, through nginx): only /api/status (-> /status), '
+               + '/api/crous/menu (-> /crous/menu), /api/flopedt/* and /ical/*. The other routes are reachable '
+               + 'from the host only (127.0.0.1:8094).',
     contact: { name: 'Clément Herrard', url: 'https://chairgamertag87.fr' },
   },
   servers: [
-    { url: 'https://kraftflopedt.habibiserver.dev', description: 'Local dev' },
-    { url: 'https://habibiserver.dev', description: 'Production' },
+    { url: 'http://127.0.0.1:8094', description: 'Host (docker-compose, loopback only)' },
   ],
   tags: [
     { name: 'Schedule', description: 'Course schedules' },
@@ -315,7 +318,9 @@ const OPENAPI_SPEC = {
             description: 'List of normalized courses',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CourseListResponse' } } },
           },
-          400: { description: 'Missing required parameter', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          400: { description: 'Missing, invalid or repeated parameter, unknown department or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Week outside the current academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -328,6 +333,8 @@ const OPENAPI_SPEC = {
         ],
         responses: {
           200: { description: 'Group tree (raw + flattened)', content: { 'application/json': { schema: { $ref: '#/components/schemas/GroupTreeResponse' } } } },
+          400: { description: 'Unknown department or repeated parameter', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -345,6 +352,9 @@ const OPENAPI_SPEC = {
         ],
         responses: {
           200: { description: 'Free / busy rooms', content: { 'application/json': { schema: { $ref: '#/components/schemas/FreeRoomsResponse' } } } },
+          400: { description: 'Missing or invalid parameter (day, start, end), unknown department', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Week outside the current academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -366,6 +376,78 @@ const OPENAPI_SPEC = {
         responses: {
           200: { description: 'Menus normalises, du jour courant aux jours suivants publies', content: { 'application/json': { schema: { $ref: '#/components/schemas/CrousMenuResponse' } } } },
           503: { description: 'Aucune source disponible', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/status': {
+      get: {
+        tags: ['Utility'],
+        summary: 'Store and CROUS cache state (public as /api/status)',
+        responses: {
+          200: { description: 'Never cached', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
+        },
+      },
+    },
+    '/ical/{dept}/{promo}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a promo (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'promo', in: 'path', required: true, schema: { type: 'string' }, example: 'BUT1' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed, promo or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/ical/{dept}/{promo}/{group}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a group (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'promo', in: 'path', required: true, schema: { type: 'string' }, example: 'BUT1' },
+          { name: 'group', in: 'path', required: true, schema: { type: 'string' }, example: '1A' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed, promo or group', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/ical/prof/{dept}/{tutor}.ics': {
+      get: {
+        tags: ['Schedule'],
+        summary: 'iCalendar feed of a teacher (public as /ical/...)',
+        parameters: [
+          { name: 'dept',  in: 'path', required: true, schema: { type: 'string' }, example: 'INFO' },
+          { name: 'tutor', in: 'path', required: true, schema: { type: 'string' }, example: 'NEK' },
+        ],
+        responses: {
+          200: { description: 'text/calendar', content: { 'text/calendar': { schema: { type: 'string' } } } },
+          404: { description: 'Unknown feed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'No local data', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api/flopedt/{endpoint}': {
+      get: {
+        tags: ['Utility'],
+        summary: 'Raw FlOpEDT endpoint served from the local store (used by the front)',
+        description: 'Allowed endpoints: fr/api/fetch/scheduledcourses/, fr/api/fetch/constraints/, fr/api/groups/structural/tree/, fr/api/rooms/all/. '
+                   + 'Query parameters are validated by the store (dept whitelist, week/year integers, no repeated parameter).',
+        parameters: [
+          { name: 'endpoint', in: 'path', required: true, schema: { type: 'string' }, example: 'fr/api/fetch/scheduledcourses/' },
+        ],
+        responses: {
+          200: { description: 'FlOpEDT JSON body, with X-Cache and X-Data-Fetched-At headers', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
+          400: { description: 'Parameter rejected by the store', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Endpoint not allowed or week outside the academic year', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          503: { description: 'FlOpEDT unreachable and no local copy', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -511,7 +593,7 @@ const DOCS_HTML = `<!doctype html>
     };
     document.getElementById('api-reference').dataset.configuration = JSON.stringify(configuration);
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.3"></script>
 </body>
 </html>`;
 
@@ -545,7 +627,7 @@ const ROUTES = {
                     },
   '/':              () => ({
     name: 'KraftFlopEDT Adapter',
-    version: '1.0',
+    version: OPENAPI_SPEC.info.version,
     docs: '/docs',
     openapi: '/openapi.json',
     endpoints: [
@@ -554,6 +636,9 @@ const ROUTES = {
       'GET /free-rooms?week=9&year=2026&dept=INFO&day=m&start=480&end=565',
       'GET /current-week',
       'GET /crous/menu',
+      'GET /status',
+      'GET /ical/<dept>/<promo>[/<groupe>].ics, GET /ical/prof/<dept>/<initiales>.ics',
+      `GET ${RAW_PREFIX}/<endpoint FlOpEDT>`,
     ],
   }),
 };
@@ -664,13 +749,12 @@ store.start();
 crous.start();
 
 server.listen(PORT, () => {
-  console.log(`\n  KraftFlopEDT Adapter → https://kraftflopedt.habibiserver.dev`);
-  console.log(`  Docs                 → https://kraftflopedt.habibiserver.dev/docs`);
+  console.log(`\n  KraftFlopEDT Adapter listening on http://127.0.0.1:${PORT}`);
+  console.log(`  Docs: http://127.0.0.1:${PORT}/docs`);
   console.log(`  Source: https://${FLOPEDT_HOST}\n`);
   console.log('  Endpoints:');
   for (const r of Object.keys(ROUTES).filter(r => r !== '/')) console.log(`    GET ${r}`);
   console.log(`    GET /status`);
-  console.log(`    GET /crous/menu`);
   console.log(`    GET ${RAW_PREFIX}<endpoint FlOpEDT>  (${Object.keys(store.ENDPOINTS).length} endpoints)`);
   console.log('');
 });
