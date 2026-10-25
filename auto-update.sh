@@ -47,8 +47,12 @@ if [ "$(git rev-parse HEAD)" != "$TARGET" ]; then
 fi
 
 log "deploiement de $(git rev-parse --short "$TARGET") (dernier deploye : ${DEPLOYED:-aucun})..."
-if ! docker compose up -d --build 2>&1 | tail -3; then
+# --wait : le commit n'est marque deploye que si les conteneurs sont healthy ;
+# un build reussi suivi d'un conteneur qui meurt au demarrage etait sinon
+# considere comme deploye et jamais retente
+if ! docker compose up -d --build --wait --wait-timeout 120 2>&1 | tail -3; then
   log "ECHEC du deploiement de $(git rev-parse --short "$TARGET"), nouvel essai au prochain passage"
+  docker compose logs --tail 30 2>&1 || true
   exit 1
 fi
 echo "$TARGET" > "$STATE"
