@@ -80,6 +80,19 @@ test('weeksToMaintain : entre le 21 et le 31 juillet on bascule sur l annee suiv
   assert.ok(weeks.length > 40);
 });
 
+test('weekInWindow et weeksToMaintain : meme bascule du 20 juillet (KF10087)', () => {
+  const now = new Date('2027-07-25T08:00:00Z');
+  const ids = store.weeksToMaintain(now).map(w => `${w.year}-${w.week}`);
+  assert.ok(ids.includes('2027-36'));
+  assert.equal(store.weekInWindow(2027, 36, now), true, 'une semaine entretenue est dans la fenetre');
+  assert.equal(store.weekInWindow(2028, 35, now), true);
+  assert.equal(store.weekInWindow(2026, 40, now), false, 'l annee precedente est sortie');
+  // Le 19 juillet on est encore sur 2026-2027
+  const before = new Date('2027-07-19T08:00:00Z');
+  assert.equal(store.weekInWindow(2026, 40, before), true);
+  assert.equal(store.weekInWindow(2027, 36, before), false);
+});
+
 test('weeksToMaintain : autour du 1er janvier, S53 de 2026 puis S1 de 2027', () => {
   const ids = store.weeksToMaintain(new Date('2026-12-30T08:00:00Z')).map(w => `${w.year}-${w.week}`);
   assert.equal(ids[0], '2026-53');
