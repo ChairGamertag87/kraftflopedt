@@ -57,6 +57,17 @@ function showUnavailable() {
     </div>`;
 }
 
+/** Refus de l'adapter (4xx) : la demande ne peut pas aboutir, pas de bouton Réessayer. */
+function showRejected(reason) {
+  _displayedCourses = [];
+  document.getElementById('schedule-container').innerHTML = `
+    <div class="state-box">
+      <span class="state-icon">🚫</span>
+      Semaine indisponible
+      <div class="state-sub">// ${escapeHtml(reason)}</div>
+    </div>`;
+}
+
 /**
  * Affiche un message d'erreur dans la bannière.
  * @param {string} msg

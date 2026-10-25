@@ -151,6 +151,43 @@ test('loadSchedule : hors ligne, une semaine vide deja visitee n est pas "sans c
   assert.match(document._els['error-banner'].textContent, /Hors-ligne/);
 });
 
+test('apiFetch : le message d erreur de l adapter est lu, un corps non JSON ne plante pas (KF20063)', async () => {
+  const a = load(async () => ({ ok: false, status: 404, json: async () => ({ error: 'Semaine 2026-S20 hors de l annee universitaire en cours' }) }));
+  await assert.rejects(a.apiFetch('/fr/api/fetch/scheduledcourses/', 'x'), e => e.status === 404 && /S20 hors/.test(e.message));
+  const b = load(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); } }));
+  await assert.rejects(b.apiFetch('/fr/api/fetch/scheduledcourses/', 'x'), e => e.status === 502 && /HTTP 502/.test(e.message));
+  const c = load(async (url, opts) => { assert.ok(opts.signal, 'AbortController branche'); return { ok: true, status: 200, json: async () => [1] }; });
+  assert.deepEqual(plain(await c.apiFetch('/fr/api/fetch/scheduledcourses/', 'x')), [1]);
+});
+
+test('loadSchedule : un refus 4xx affiche la raison sans bouton Reessayer (KF20063)', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({ error: 'Semaine 2026-S20 hors de l annee universitaire en cours' }) });
+  const { ctx, document } = loadUi(fetchImpl);
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  const html = document._els['schedule-container'].innerHTML;
+  assert.match(html, /Semaine indisponible/);
+  assert.match(html, /S20 hors/);
+  assert.doesNotMatch(html, /Réessayer/);
+  assert.match(document._els['error-banner'].textContent, /S20 hors/);
+});
+
+test('changeWeek : la navigation s arrete aux bornes de l annee universitaire (KF20063)', () => {
+  const { ctx } = loadUi(okJson([]));
+  const state = require('vm').runInContext('state', ctx); // const du script, pas une globale du contexte
+  const now = new Date();
+  const start_year = now > new Date(now.getFullYear(), 6, 20) ? now.getFullYear() : now.getFullYear() - 1;
+  state.currentWeek = 27; state.currentYear = start_year;   // S26 (lundi 22-28 juin) est toujours hors fenetre
+  ctx.changeWeek(-1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [27, start_year]);
+  state.currentWeek = 35; state.currentYear = start_year + 1; // S36 (lundi 1er-7 sept) est toujours hors fenetre
+  ctx.changeWeek(1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [35, start_year + 1]);
+  state.currentWeek = 40; state.currentYear = start_year;
+  ctx.changeWeek(1);
+  assert.deepEqual([state.currentWeek, state.currentYear], [41, start_year]);
+});
+
 test('fillPromoChips : aucune promo activee d office (KF30056)', () => {
   const { ctx, document } = loadUi();
   const container = document.getElementById('promo-btns');

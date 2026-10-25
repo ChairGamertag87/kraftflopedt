@@ -46,6 +46,17 @@ function getWeekDates(week, year) {
 }
 
 /**
+ * Fenêtre servie par l'adapter (store.js, weekInWindow) : du 1er juillet qui
+ * précède l'année universitaire en cours (bascule le 20 juillet) au 31 août
+ * suivant. Toute autre semaine est refusée en 404.
+ */
+function isWeekInAcademicYear(week, year, now = new Date()) {
+  const start_year = now > new Date(now.getFullYear(), 6, 20) ? now.getFullYear() : now.getFullYear() - 1;
+  const mon = getWeekDates(week, year).mon.getTime();
+  return mon >= new Date(start_year, 6, 1).getTime() && mon <= new Date(start_year + 1, 7, 31).getTime();
+}
+
+/**
  * Echappe une chaine avant insertion en innerHTML. Les donnees FlOpEDT
  * (noms de modules, salles, profs) et CROUS ne sont pas de confiance :
  * un simple "<" dans un nom cassait la carte, et un compte FlOpEDT

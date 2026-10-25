@@ -11,11 +11,30 @@
  * En prod il est servi par le nginx du conteneur web (docker/nginx.conf),
  * en dev par server.js : même chemin dans les deux cas.
  */
+const API_TIMEOUT_MS = 20000;
+
 async function apiFetch(endpoint, params) {
   const url = `/api/flopedt${endpoint}?${params}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} sur ${endpoint}`);
-  return res.json();
+  // nginx attend l'adapter jusqu'à 90 s : au-delà de 20 s on abandonne
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? `pas de réponse en ${API_TIMEOUT_MS / 1000} s sur ${endpoint}` : e.message);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    // L'adapter répond { error } en JSON ; un 502 nginx renvoie du HTML
+    let detail = '';
+    try { detail = String((await res.json()).error || ''); } catch (_) { /* corps non JSON */ }
+    const err = new Error(detail || `HTTP ${res.status} sur ${endpoint}`);
+    err.status = res.status;
+    throw err;
+  }
+  try { return await res.json(); } catch (_) { throw new Error(`réponse illisible sur ${endpoint}`); }
 }
 
 // ════════════════════════════
@@ -62,7 +81,7 @@ async function fetchAncestorMap(dept, promo) {
   try {
     tree = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
   } catch (e) {
-    throw new Error(`arbre des groupes indisponible : ${e.message}`);
+    throw Object.assign(new Error(`arbre des groupes indisponible : ${e.message}`), { status: e.status });
   }
   const byPromo = {}, merged = {};
   // L'arbre est un tableau de racines (une par promo : BUT1, BUT2, BUT3)
@@ -113,7 +132,7 @@ async function fetchDurations(dept) {
   try {
     data = await apiFetch('/fr/api/fetch/constraints/', `dept=${encodeURIComponent(dept)}`);
   } catch (e) {
-    throw new Error(`durées des créneaux indisponibles : ${e.message}`);
+    throw Object.assign(new Error(`durées des créneaux indisponibles : ${e.message}`), { status: e.status });
   }
   const map = {};
   for (const [type, val] of Object.entries(data)) {
@@ -308,6 +327,11 @@ async function loadSchedule() {
 
       if (cached.courses.length === 0) showEmptyWeek();
       showError(`Hors-ligne — données du cache (${agoText})`);
+    } else if (e.status >= 400 && e.status < 500) {
+      // Refus de l'adapter (semaine hors année universitaire, paramètre invalide) :
+      // réessayer ne peut pas aboutir, pas de bouton
+      showError(`Semaine indisponible : ${e.message}`);
+      showRejected(e.message);
     } else {
       showError(`Impossible de charger l'emploi du temps (${e.message})`);
       showUnavailable();

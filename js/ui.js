@@ -156,14 +156,20 @@ function updateWeekLabel() {
 }
 
 function changeWeek(delta) {
-  state.currentWeek += delta;
-  if (state.currentWeek < 1) {
-    state.currentYear--;
-    state.currentWeek = getISOWeeksInYear(state.currentYear); // 52 ou 53
-  } else if (state.currentWeek > getISOWeeksInYear(state.currentYear)) {
-    state.currentYear++;
-    state.currentWeek = 1;
+  let week = state.currentWeek + delta;
+  let year = state.currentYear;
+  if (week < 1) {
+    year--;
+    week = getISOWeeksInYear(year); // 52 ou 53
+  } else if (week > getISOWeeksInYear(year)) {
+    year++;
+    week = 1;
   }
+  // L'adapter refuse (404) toute semaine hors de l'année universitaire en cours :
+  // la navigation s'arrête aux bornes au lieu de reculer jusqu'en 2020
+  if (!isWeekInAcademicYear(week, year)) return;
+  state.currentWeek = week;
+  state.currentYear = year;
   updateWeekLabel();
   // Sans groupe, loadSchedule remet l'invite (et invalide une reponse en vol)
   loadSchedule();

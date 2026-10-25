@@ -46,6 +46,18 @@ test('getWeekDates : lundi et vendredi de la semaine, libelle S<n>', () => {
   assert.equal(s53.mon.getMonth(), 11);
 });
 
+test('isWeekInAcademicYear : fenetre du 1er juillet au 31 aout suivant, bascule le 20 juillet (KF20063)', () => {
+  const now = new Date(2026, 9, 25); // annee universitaire 2026-2027
+  assert.equal(u.isWeekInAcademicYear(20, 2026, now), false);
+  assert.equal(u.isWeekInAcademicYear(26, 2026, now), false); // lundi 22 juin 2026
+  assert.equal(u.isWeekInAcademicYear(28, 2026, now), true);  // lundi 6 juillet 2026
+  assert.equal(u.isWeekInAcademicYear(43, 2026, now), true);
+  assert.equal(u.isWeekInAcademicYear(35, 2027, now), true);  // lundi 30 aout 2027
+  assert.equal(u.isWeekInAcademicYear(36, 2027, now), false);
+  assert.equal(u.isWeekInAcademicYear(40, 2026, new Date(2027, 6, 25)), false, 'apres le 20 juillet, annee suivante');
+  assert.equal(u.isWeekInAcademicYear(36, 2027, new Date(2027, 6, 25)), true);
+});
+
 test('escapeHtml : les cinq caracteres dangereux, null et nombres', () => {
   assert.equal(u.escapeHtml(`<b onclick="x">Tom & 'Jerry'</b>`),
     '&lt;b onclick=&quot;x&quot;&gt;Tom &amp; &#39;Jerry&#39;&lt;/b&gt;');
