@@ -106,6 +106,34 @@ test('fetchAncestorMap : un arbre indisponible est une erreur, pas une table vid
   await assert.rejects(a.fetchAncestorMap('INFO', 'BUT1'), /arbre des groupes indisponible.*HTTP 503/);
 });
 
+test('fetchTree et fetchDurations : une requete par departement, partagee, retentee apres un echec (KF10022)', async () => {
+  const calls = [];
+  let fail = false;
+  const a = load(async url => { calls.push(url); if (fail) return { ok: false, status: 503, json: async () => ({}) }; return { ok: true, status: 200, json: async () => (url.includes('tree') ? TREE : { CM: { duration: 85 } }) }; });
+  await Promise.all([a.fetchAncestorMap('INFO', 'BUT1'), a.fetchAncestorMap('INFO', 'BUT2'), a.fetchTree('INFO'), a.fetchDurations('INFO'), a.fetchDurations('INFO')]);
+  assert.equal(calls.filter(u => u.includes('tree')).length, 1, 'un seul arbre INFO');
+  assert.equal(calls.filter(u => u.includes('constraints')).length, 1, 'une seule table de durees INFO');
+  await a.fetchTree('RT');
+  assert.equal(calls.filter(u => u.includes('tree')).length, 2, 'autre departement : autre requete');
+  fail = true;
+  await assert.rejects(a.fetchTree('CS'));
+  fail = false;
+  assert.ok(Array.isArray(await a.fetchTree('CS')), 'un echec n est pas memorise');
+});
+
+test('fetchSchedule : sans l arbre, les cours sont rendus mais pas mis en cache (KF10022)', async () => {
+  const course = { id: 1, day: 'm', start_time: 480, tutor: 'X', room: { name: 'A1' }, course: { type: 'TD', module: { name: 'M', abbrev: 'M' }, groups: [{ name: '1A', train_prog: 'BUT1' }] } };
+  const fetchImpl = async url => url.includes('tree')
+    ? { ok: false, status: 503, json: async () => ({ error: 'FlOpEDT indisponible' }) }
+    : { ok: true, status: 200, json: async () => (url.includes('constraints') ? { TD: { duration: 85 } } : [course]) };
+  const saved = [];
+  const { ctx, document } = loadUi(fetchImpl, { localStorage: { getItem: () => null, setItem: (k, v) => saved.push(k), removeItem() {}, key: () => null, length: 0 } });
+  Object.assign(document._active, { 'dept-btns': 'INFO', 'promo-btns': 'BUT1', 'group-btns': '1A' });
+  await ctx.loadSchedule();
+  assert.match(document._els['error-banner'].textContent, /Arbre des groupes indisponible/);
+  assert.equal(saved.filter(k => k.startsWith('edt-cache')).length, 0, 'resultat partiel jamais mis en cache');
+});
+
 test('fetchDurations : seules les contraintes portant une duree sont gardees', async () => {
   const a = load(okJson({ CM: { duration: 85 }, TP: { duration: 170 }, Conf: {}, DS: null }));
   assert.deepEqual(plain(await a.fetchDurations('INFO')), { CM: 85, TP: 170 });

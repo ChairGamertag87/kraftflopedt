@@ -231,19 +231,16 @@ function flattenTree(nodes, result = []) {
   return result;
 }
 
-const _treeCache = {};
-
 async function loadGroupsFromAPI() {
   const dept = getSelectedDept();
 
   try {
-    if (!_treeCache[dept]) {
-      _treeCache[dept] = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
-    }
+    // Promesse partagee avec l'EDT (api.js) : une seule requete d'arbre par departement
+    const tree = await fetchTree(dept);
     // Clic INFO puis vite RT : si l'arbre INFO arrive en dernier, il ne doit
     // pas remplacer les promos RT (le departement actif a change entre-temps)
     if (getSelectedDept() !== dept) return;
-    state.groupTree = _treeCache[dept];
+    state.groupTree = tree;
 
     // Génère les chips de promo depuis l'arbre
     buildPromoChips();

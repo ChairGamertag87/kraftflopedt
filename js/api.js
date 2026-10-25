@@ -76,10 +76,29 @@ function buildAncestorMap(nodes, ancestors, map) {
  * @param {string} [promo]  promo sélectionnée ; sans promo, toutes les tables sont fusionnées
  * @returns {Promise<Object>}  — { "1A": ["1","CE"], "CE": [], ... }
  */
+// Arbre et contraintes par département : chargés une fois par page (promesse
+// partagée entre l'EDT, le sélecteur et les salles libres), oubliés en cas d'échec
+// pour être retentés. Changer de semaine ne les retéléchargeait pas moins.
+const _deptData = {};
+function deptData(dept) {
+  if (!Object.hasOwn(_deptData, dept)) _deptData[dept] = { tree: null, durations: null };
+  return _deptData[dept];
+}
+
+/** Arbre brut des groupes d'un département (partagé, une requête par page). */
+function fetchTree(dept) {
+  const d = deptData(dept);
+  if (!d.tree) {
+    d.tree = apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`)
+      .catch(e => { d.tree = null; throw e; });
+  }
+  return d.tree;
+}
+
 async function fetchAncestorMap(dept, promo) {
   let tree;
   try {
-    tree = await apiFetch('/fr/api/groups/structural/tree/', `dept=${encodeURIComponent(dept)}`);
+    tree = await fetchTree(dept);
   } catch (e) {
     throw Object.assign(new Error(`arbre des groupes indisponible : ${e.message}`), { status: e.status });
   }
@@ -127,7 +146,15 @@ function isGroupVisible(courseGroup, selectedGroup, ancestorMap) {
  * Retourne une map type → durée en minutes. Une erreur est propagée : des
  * durées par défaut de 85 min donnaient de fausses heures de fin, mises en cache.
  */
-async function fetchDurations(dept) {
+function fetchDurations(dept) {
+  const d = deptData(dept);
+  if (!d.durations) {
+    d.durations = loadDurations(dept).catch(e => { d.durations = null; throw e; });
+  }
+  return d.durations;
+}
+
+async function loadDurations(dept) {
   let data;
   try {
     data = await apiFetch('/fr/api/fetch/constraints/', `dept=${encodeURIComponent(dept)}`);
@@ -152,19 +179,23 @@ function getDuration(courseType, durations) {
 /**
  * Charge cours + durées + arbre des groupes en parallèle,
  * puis normalise et filtre les cours.
+ * Sans l'arbre, l'EDT est quand même rendu (cours du groupe exact seulement) :
+ * tree_error est renseigné et l'appelant ne met pas ce résultat partiel en cache.
+ * @returns {Promise<{courses: Array, tree_error: Error|null}>}
  */
 async function fetchSchedule(dept, promo, group) {
   const params = `dept=${encodeURIComponent(dept)}&week=${state.currentWeek}&year=${state.currentYear}&work_copy=0`;
 
+  let tree_error = null;
   const [raw, durations, ancestorMap] = await Promise.all([
     apiFetch('/fr/api/fetch/scheduledcourses/', params),
     fetchDurations(dept),
-    fetchAncestorMap(dept, promo),
+    fetchAncestorMap(dept, promo).catch(e => { tree_error = e; return {}; }),
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
 
-  return list
+  const courses = list
     .map(c => {
       const course   = c.course  || {};
       const module   = course.module || {};
@@ -209,6 +240,7 @@ async function fetchSchedule(dept, promo, group) {
       }
       return true;
     });
+  return { courses, tree_error };
 }
 
 // ════════════════════════════
@@ -301,12 +333,14 @@ async function loadSchedule() {
   }
 
   try {
-    const courses = await fetchSchedule(dept, promo, group);
+    const { courses, tree_error } = await fetchSchedule(dept, promo, group);
 
     // Le cache est toujours ecrit sous la bonne cle ; seul l'affichage est
-    // reserve au dernier chargement demande.
-    cacheSave(dept, promo, group, week, year, courses);
+    // reserve au dernier chargement demande. Sans l'arbre, le filtre est partiel
+    // (CM de promo et TD du groupe parent absents) : jamais mis en cache.
+    if (!tree_error) cacheSave(dept, promo, group, week, year, courses);
     if (seq !== _loadSeq) return;
+    if (tree_error) showError(`Arbre des groupes indisponible : seuls les cours du groupe ${group} sont affichés (${tree_error.message})`);
 
     if (courses.length === 0) {
       showEmptyWeek();
