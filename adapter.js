@@ -199,8 +199,16 @@ async function getGroupTree({ dept }) {
 }
 
 async function getFreeRooms({ week, year, dept, day, start, end }) {
-  if (!week || !year || !dept || !day || !start || !end) {
+  if (!week || !year || !dept || !day || start == null || end == null || start === '' || end === '') {
     throw store.httpError(400, 'Required parameters: week, year, dept, day, start, end');
+  }
+  const start_num = Number(start);
+  const end_num   = Number(end);
+  if (!Number.isInteger(start_num) || !Number.isInteger(end_num) || start_num < 0 || start_num >= end_num) {
+    throw store.httpError(400, 'start and end must be integers (minutes since midnight) with start < end');
+  }
+  if (!Object.hasOwn(DAY_INDEX, day)) {
+    throw store.httpError(400, `day must be one of: ${Object.keys(DAY_INDEX).join(', ')}`);
   }
 
   const [raw, durations] = await Promise.all([
@@ -209,8 +217,8 @@ async function getFreeRooms({ week, year, dept, day, start, end }) {
   ]);
 
   const list = Array.isArray(raw) ? raw : (raw.results || []);
-  const startNum = Number(start);
-  const endNum   = Number(end);
+  const startNum = start_num;
+  const endNum   = end_num;
 
   // Rooms busy during the requested time slot
   const busy = new Set();
