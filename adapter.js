@@ -656,15 +656,9 @@ function send(res, status, payload, cacheControl) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Accept',
-    });
-    return res.end();
-  }
-  if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' });
+  // HEAD : Node n'ecrit pas le corps pour cette methode, les routes restent inchangees.
+  // OPTIONS n'arrive jamais ici (nginx le refuse en amont), le code dedie a ete retire.
+  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' });
 
   const parsed = url.parse(req.url, true);
 
