@@ -43,6 +43,13 @@ test('parseMenuHtml : plats sans service ni categorie rattaches a midi / Menu', 
   assert.deepEqual(crous.parseMenuHtml('<h2>midi</h2><h4>Entrees</h4>'), []);
 });
 
+test('parseMenuHtml : un moment nomme constructor ou __proto__ reste une chaine (KF10092)', () => {
+  const s = crous.parseMenuHtml('<h2>constructor</h2><h4>Entrees</h4><ul><li>Radis</li></ul>');
+  assert.equal(s[0].moment, 'constructor');
+  const p = crous.parseMenuHtml('<h2>__proto__</h2><h4>Entrees</h4><ul><li>Radis</li></ul>');
+  assert.equal(p[0].moment, '__proto__');
+});
+
 test('parseMenuHtml : un avis de fermeture sans plat est conserve comme notice du service (KF30060)', () => {
   const closed = '<h2>midi</h2><h4>Structure ferm&eacute;e du Lundi 26 Octobre 2026 au Vendredi 30 Octobre 2026</h4>';
   assert.deepEqual(crous.parseMenuHtml(closed), [{

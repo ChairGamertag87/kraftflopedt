@@ -231,7 +231,8 @@ const MOMENTS = { matin: 'matin', midi: 'midi', soir: 'soir' };
 
 function normaliseMoment(s) {
   const k = cleanText(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return MOMENTS[k] || k || 'midi';
+  // Object.hasOwn : "constructor" ou "__proto__" en titre de service rendraient une fonction ou un objet
+  return (Object.hasOwn(MOMENTS, k) ? MOMENTS[k] : k) || 'midi';
 }
 
 function normaliseLibelle(s) {

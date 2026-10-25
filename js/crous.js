@@ -139,7 +139,7 @@ function renderCrousDays() {
   for (const svc of day.services) {
     html += `<div class="crous-service">`;
     if (day.services.length > 1 || svc.moment !== 'midi') {
-      html += `<div class="crous-service-title">${CROUS_MOMENT_LABEL[svc.moment] || crousEscape(svc.moment)}</div>`;
+      html += `<div class="crous-service-title">${Object.hasOwn(CROUS_MOMENT_LABEL, svc.moment) ? CROUS_MOMENT_LABEL[svc.moment] : crousEscape(svc.moment)}</div>`;
     }
     if (svc.notice) {
       html += `<div class="crous-closed"><span class="sel-chip crous-closed-chip">Fermé</span>${crousEscape(svc.notice)}</div>`;
